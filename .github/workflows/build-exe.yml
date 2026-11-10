@@ -45,10 +45,11 @@ jobs:
           Write-Output "AAPL обновлён $age с назад, цена $($doc.quote.price)"
           if ($age -gt 300) { throw "кнопка «Обновить» не обновила AAPL" }
           Write-Output "OK: exe работает, обновление по кнопке проходит"
+      - name: Файл запуска для iPhone рядом с exe
+        shell: pwsh
+        run: Copy-Item -LiteralPath "Запуск для iPhone.bat" -Destination dist\
       - uses: actions/upload-artifact@v4
         with:
           name: TerminalApp-windows
-          path: |
-            dist/TerminalApp.exe
-            Запуск для iPhone.bat
+          path: dist/
           retention-days: 90
