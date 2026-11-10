@@ -5,3 +5,4 @@ build/
 dist/
 *.spec
 build_check_data/
+check_out/

@@ -45,6 +45,21 @@ jobs:
           Write-Output "AAPL обновлён $age с назад, цена $($doc.quote.price)"
           if ($age -gt 300) { throw "кнопка «Обновить» не обновила AAPL" }
           Write-Output "OK: exe работает, обновление по кнопке проходит"
+      - name: Проверка терминала в Edge на свежих данных Yahoo
+        id: edge
+        continue-on-error: true
+        env:
+          PYTHONIOENCODING: utf-8
+        run: |
+          pip install playwright
+          python tools/check_page.py
+      - name: Скриншоты и данные проверки в Edge
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: edge-check
+          path: check_out/
+          retention-days: 14
       - name: Файл запуска для iPhone рядом с exe
         shell: pwsh
         run: Copy-Item -LiteralPath "Запуск для iPhone.bat" -Destination dist\
