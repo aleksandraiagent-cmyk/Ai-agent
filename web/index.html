@@ -1,0 +1,259 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Терминал сигналов</title>
+<meta name="description" content="Учебный терминал анализа акций и криптовалют: сигнал «Покупать / Продавать» по 9 факторам.">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<header class="top">
+  <div class="brand" data-tip="Терминал анализа акций — сигнал «Покупать / Продавать». Учебный инструмент." data-tip-en="Stock analysis terminal — Buy / Sell signal. Educational tool.">
+    <span class="logo">◈</span><span class="brand-t" data-en="Signal Terminal">Терминал сигналов</span>
+  </div>
+  <div class="search" data-tip="Поиск любого тикера Yahoo или названия компании" data-tip-en="Search any Yahoo ticker or company name">
+    <input id="search" autocomplete="off" placeholder="Тикер или компания…" data-ph-en="Ticker or company…">
+    <div id="searchRes" class="dropdown hidden"></div>
+  </div>
+  <label class="btn" data-tip="Загрузить свои котировки из CSV: дата, открытие, максимум, минимум, закрытие, объём" data-tip-en="Load your own CSV: date, open, high, low, close, volume">
+    <span data-en="CSV">CSV</span><input type="file" id="csvFile" accept=".csv,.txt" hidden>
+  </label>
+  <div class="clock" id="brokerClock" data-tip="Часы брокера: время по вашему поясу и состояние биржи США" data-tip-en="Broker clock: your time zone and US market state"></div>
+  <div class="dstatus" id="dataStatus" data-tip="Статус данных Yahoo Finance" data-tip-en="Yahoo Finance data status"></div>
+  <button class="btn primary" id="btnRefresh" data-tip="Одно нажатие выгружает все тикеры из Yahoo (3–6 минут). Автообновления нет." data-tip-en="One click downloads all tickers from Yahoo (3–6 min). No auto-refresh."><span data-en="⟳ Refresh">⟳ Обновить</span></button>
+  <button class="btn" id="btnSettings" data-tip="Параметры всех индикаторов и пороги сигнала" data-tip-en="All indicator parameters and signal thresholds"><span data-en="⚙ Settings">⚙ Параметры</span></button>
+  <select id="themeSel" class="sel" data-tip="Тема: светлая, тёмная или авто по рассвету и закату" data-tip-en="Theme: light, dark or auto by sunrise/sunset">
+    <option value="auto" data-en="Auto">Авто</option><option value="light" data-en="Light">Светлая</option><option value="dark" data-en="Dark">Тёмная</option>
+  </select>
+  <select id="langSel" class="sel" data-tip="Язык интерфейса" data-tip-en="Interface language"><option value="ru">RU</option><option value="en">EN</option></select>
+  <button class="btn" id="btnGuide" data-tip="Путеводитель: подсказки и экскурсия по терминалу" data-tip-en="Guide: tooltips and terminal tour"><span data-en="❓ Guide">❓ Путеводитель</span></button>
+</header>
+
+<nav class="tabs" id="tabs">
+  <button data-tab="terminal" class="active" data-en="📈 Terminal">📈 Терминал</button>
+  <button data-tab="forex" data-en="📰 Forex news">📰 Новости Форекс</button>
+  <button data-tab="analysts" data-en="🎯 Analysts">🎯 Аналитики</button>
+  <button data-tab="invest" data-en="💼 Portfolio">💼 Инвестпакет</button>
+  <button data-tab="calendar" data-en="📅 Market calendar">📅 Календарь биржи</button>
+  <button data-tab="avg" data-en="🧮 Averaging">🧮 Усреднение</button>
+</nav>
+
+<div class="favbar" id="favBar" data-tip="★ Избранное: до 30 тикеров с ценой, изменением и сигналом по дневкам" data-tip-en="★ Favourites: up to 30 tickers with price, change and daily signal"></div>
+<div class="strip" id="tickerStrip"></div>
+
+<main>
+<!-- ============================ ТЕРМИНАЛ ============================ -->
+<section id="tab-terminal" class="tab active">
+  <div class="topgrid">
+    <div class="card quote" data-tip="Тикер, цена, изменение и ключевые показатели" data-tip-en="Ticker, price, change and key stats">
+      <div class="qhead">
+        <button id="favToggle" class="star" title="★">☆</button>
+        <div><div class="sym" id="qSym">—</div><div class="qname" id="qName"></div></div>
+        <div class="qprice"><div id="qPrice">—</div><div id="qChange"></div></div>
+      </div>
+      <div class="kv" id="qStats"></div>
+      <div class="demo-note hidden" id="demoNote" data-en="DEMO data: press ⟳ Refresh in the Python app (terminal_app.py) to load real Yahoo quotes.">ДЕМО-данные: запустите terminal_app.py и нажмите «⟳ Обновить», чтобы загрузить котировки Yahoo.</div>
+    </div>
+    <div class="card signal" id="signalBox" data-tip="Итоговый сигнал: балл 9 факторов, уверенность и причина" data-tip-en="Final signal: 9-factor score, confidence and reason">
+      <div class="sig-label" id="sigLabel">—</div>
+      <div class="sig-conf"><span data-en="Confidence">Уверенность</span>: <b id="sigConf">—</b></div>
+      <div class="sig-reason" id="sigReason"></div>
+      <label class="switch"><input type="checkbox" id="longOnly" checked> <span data-en="Long only">Только покупки</span></label>
+    </div>
+    <div class="card gaugebox" data-tip="Шкала «продавать ↔ покупать» 0–100, 50 — равновесие (= 50 + балл/2)" data-tip-en="Sell ↔ Buy gauge 0–100, 50 = balance (= 50 + score/2)">
+      <svg id="gauge" viewBox="0 0 220 130"></svg>
+    </div>
+    <div class="card calc" data-tip="Калькулятор покупки: количество акций → сумма по текущей цене с комиссией брокера" data-tip-en="Purchase calculator: quantity → amount at current price with broker fee">
+      <h4 data-en="Purchase calculator">Калькулятор покупки</h4>
+      <div class="row"><input id="calcQty" value="10" inputmode="decimal"><button class="btn sm" data-add="1">+1</button><button class="btn sm" data-add="10">+10</button><button class="btn sm" data-add="100">+100</button><button class="btn sm" data-add="0">⟲</button></div>
+      <div class="row"><span data-en="Fee">Комиссия</span> <select id="calcBroker" class="sel brokerSel"></select></div>
+      <div class="calcres" id="calcRes"></div>
+    </div>
+  </div>
+
+  <div class="card chartcard">
+    <div class="toolbar">
+      <div class="seg" id="tfSeg" data-tip="Таймфрейм свечей" data-tip-en="Candle timeframe"></div>
+      <div class="seg" id="periodSeg" data-tip="Период на графике" data-tip-en="Visible period">
+        <button data-p="30" data-en="1M">1 мес</button><button data-p="365" data-en="1Y">1 год</button><button data-p="1825" data-en="5Y">5 лет</button><button data-p="0" data-en="All">Всё</button>
+      </div>
+      <div class="lamp" id="lamp" data-tip="Лампа рынка: зелёная — премаркет, сессия, постмаркет; красная — биржа закрыта" data-tip-en="Market lamp: green — pre, regular, post; red — closed"><i></i><span></span></div>
+    </div>
+    <div class="layers" id="layers" data-tip="12 инструментов графика — каждый включается отдельно" data-tip-en="12 chart tools — toggle each one"></div>
+    <div class="legend" id="legend"></div>
+    <div class="chartwrap"><canvas id="chart"></canvas></div>
+  </div>
+
+  <div class="cards">
+    <div class="card wide" id="cardFactors" data-tip="Оценка и объяснение каждого из 9 факторов" data-tip-en="Score and explanation of each of the 9 factors">
+      <h3 data-en="What the signal is made of">Из чего сложился сигнал</h3><div id="factors"></div>
+    </div>
+    <div class="card" id="cardPlan" data-tip="План сделки: депозит, риск, вход, стоп, цели, размер позиции" data-tip-en="Trade plan: deposit, risk, entry, stop, targets, position size">
+      <h3 data-en="Trade plan & risk management">План сделки и риск-менеджмент</h3>
+      <div class="row"><label><span data-en="Deposit $">Депозит $</span> <input id="deposit" value="10000" inputmode="decimal"></label><label><span data-en="Risk %">Риск %</span> <input id="riskPct" value="1" inputmode="decimal"></label></div>
+      <div id="plan"></div>
+    </div>
+    <div class="card" id="cardSessions" data-tip="Премаркет, основная сессия, постмаркет и справедливая стоимость" data-tip-en="Pre-market, regular, post-market and fair value">
+      <h3 data-en="Sessions & fair value">Сессии и справедливая стоимость</h3><div id="sessions"></div><div id="fair"></div>
+    </div>
+    <div class="card" id="cardDensity" data-tip="Стакан из профиля объёма: плотности, крупные покупки и продажи" data-tip-en="Order-book view from volume profile: densities, large buys and sells">
+      <h3 data-en="Real-volume densities">Плотности по реальному объёму</h3><div id="density"></div>
+      <h3 data-en="Volume indicator">Индикатор объёма</h3><div id="volind"></div>
+    </div>
+    <div class="card" id="cardPsy" data-tip="Индекс страха и жадности по бумаге и фаза цикла" data-tip-en="Fear & greed index and cycle phase">
+      <h3 data-en="Market psychology">Психология рынка</h3><div id="psy"></div>
+    </div>
+    <div class="card" id="cardPatterns" data-tip="Свечные модели по Гусеву: место, сила, подтверждение" data-tip-en="Gusev candlestick patterns: location, strength, confirmation">
+      <h3 data-en="Candlestick patterns (Gusev)">Свечные модели (по Гусеву)</h3><div id="patterns"></div>
+    </div>
+    <div class="card" id="cardNews" data-tip="Новости только про саму бумагу, отчёты, дивиденды; можно оценить свои заголовки" data-tip-en="Headlines naming the security, earnings, dividends; rate your own headlines">
+      <h3 data-en="News, earnings, macro">Новости, отчёты, макро</h3><div id="events"></div>
+      <textarea id="ownNews" rows="3" placeholder="Вставьте свои заголовки — по одному в строке" data-ph-en="Paste your own headlines — one per line"></textarea>
+      <div class="row"><button class="btn sm" id="btnRateOwn" data-en="Rate (keywords)">Оценить (словарь)</button><button class="btn sm" id="btnRateClaude" data-en="Rate via Claude">Оценить через Claude</button></div>
+      <div id="ownNewsRes"></div>
+    </div>
+    <div class="card" id="cardFeed"><h3 data-en="News feed">Лента новостей</h3><div id="feed" class="feed"></div></div>
+    <div class="card wide" id="cardBT" data-tip="Бэктест сигнала: итог в R, вердикт по 6 проверкам, подбор весов" data-tip-en="Signal backtest: result in R, 6-check verdict, weight tuning">
+      <h3 data-en="Signal backtest on history">Бэктест сигнала на истории</h3>
+      <div class="row wrap">
+        <select id="btScope" class="sel"><option value="one" data-en="Current ticker">Текущая бумага</option><option value="all" data-en="All tickers">Все бумаги</option></select>
+        <label><span data-en="Fee R">Комиссия R</span> <input id="btComm" value="0.05" class="xs"></label>
+        <label><span data-en="Slippage %">Проскальзывание %</span> <input id="btSlip" value="0.05" class="xs"></label>
+        <label><input type="checkbox" id="btLong" checked> <span data-en="Long only">Только покупки</span></label>
+        <button class="btn sm primary" id="btnBT" data-en="Run backtest">Запустить бэктест</button>
+        <button class="btn sm" id="btnOpt" data-en="Tune weights">Подобрать веса</button>
+        <button class="btn sm" id="btnOptApply" disabled data-en="Apply">Применить</button>
+        <button class="btn sm" id="btnOptReset" data-en="Reset weights">Сбросить веса</button>
+      </div>
+      <div id="btRes"></div>
+    </div>
+    <div class="card wide" id="cardExpert" data-tip="Экспертное резюме трейдера с 30-летним стажем и озвучка" data-tip-en="30-year trader summary with voice-over">
+      <h3 data-en="Trader's expert summary">Экспертное резюме трейдера</h3>
+      <div id="expert"></div>
+      <div class="row wrap tts">
+        <select id="ttsLang" class="sel"><option value="ru">Русский</option><option value="en">English</option></select>
+        <select id="ttsVoice" class="sel"></select>
+        <label><span data-en="Speed">Скорость</span> <input type="range" id="ttsRate" min="0.6" max="1.6" step="0.1" value="1"></label>
+        <label><span data-en="Pause, s">Пауза, с</span> <input id="ttsPause" value="0.4" class="xs"></label>
+        <button class="btn sm" id="ttsPlay" data-en="▶ Speak">▶ Озвучить</button>
+        <button class="btn sm" id="ttsStop" data-en="■ Stop">■ Стоп</button>
+        <button class="btn sm" id="ttsLive" data-en="Live retelling (Claude)">Живой пересказ (Claude)</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================ НОВОСТИ ФОРЕКС ============================ -->
+<section id="tab-forex" class="tab">
+  <div class="card">
+    <div class="row wrap">
+      <h3 data-en="Top news for 7 days and impact on 15 instruments">Главные новости за 7 дней и влияние на 15 инструментов</h3>
+      <button class="btn primary sm" id="btnForex" data-en="Collect news (5–10 min)">Собрать новости (5–10 мин)</button>
+      <span id="forexStatus" class="muted"></span>
+    </div>
+    <div class="row wrap"><select id="fxInstr" class="sel"></select><select id="fxImpact" class="sel"><option value="0" data-en="Any impact">Любое влияние</option><option value="2" data-en="|impact| ≥ 2">|влияние| ≥ 2</option><option value="3" data-en="Only ±3">Только ±3</option></select><select id="fxDir" class="sel"><option value="" data-en="Up and down">Рост и падение</option><option value="1" data-en="Bullish">Рост</option><option value="-1" data-en="Bearish">Падение</option></select></div>
+    <div id="fxSummary" class="fxsum"></div>
+    <div id="fxNews"></div>
+  </div>
+  <div class="card"><h3 data-en="Economic calendar — 7 days with scenarios">Экономический календарь на 7 дней со сценариями</h3><div id="fxCal"></div></div>
+  <div class="card"><h3 data-en="Check your own news">Проверить свою новость</h3>
+    <textarea id="fxOwn" rows="3" placeholder="Текст новости…" data-ph-en="News text…"></textarea>
+    <button class="btn sm" id="btnFxOwn" data-en="Check via Claude">Проверить через Claude</button><div id="fxOwnRes"></div></div>
+</section>
+
+<!-- ============================ АНАЛИТИКИ ============================ -->
+<section id="tab-analysts" class="tab">
+  <div class="card">
+    <div class="row wrap"><h3 data-en="Consensus and price targets for 21 stocks">Консенсус и целевые цены по 21 акции</h3>
+      <button class="btn primary sm" id="btnAnalysts" data-en="Collect (15–30 min)">Собрать (15–30 мин)</button>
+      <label><input type="checkbox" id="anFav"> <span data-en="Favourites only">Только избранное</span></label><span id="anStatus" class="muted"></span></div>
+    <div class="tablewrap"><table id="anTable" class="tbl"></table></div>
+  </div>
+  <div class="card"><h3 data-en="Bank actions in 30 days">Действия банков за 30 дней</h3><div id="anActions"></div></div>
+</section>
+
+<!-- ============================ ИНВЕСТПАКЕТ ============================ -->
+<section id="tab-invest" class="tab">
+  <div class="card">
+    <h3 data-en="Auto-pick of the most attractive stocks (analysts + terminal signal)">Автоподбор самых выгодных акций (совет аналитиков + сигнал терминала)</h3>
+    <div class="row wrap">
+      <label><span data-en="Amount $">Сумма $</span> <input id="ipSum" value="10000"></label>
+      <label><span data-en="Stocks">Бумаг</span> <input id="ipN" value="6" class="xs"></label>
+      <label><span data-en="Weights">Доли</span> <select id="ipW" class="sel"><option value="eq" data-en="Equal">Равные</option><option value="score" data-en="By score">По оценке</option></select></label>
+      <label><span data-en="Max per stock %">Макс. на бумагу %</span> <input id="ipMax" value="35" class="xs"></label>
+      <label><span data-en="Max per sector %">Лимит на отрасль %</span> <input id="ipSec" value="50" class="xs"></label>
+      <label><span data-en="Broker">Брокер</span> <select id="ipBroker" class="sel brokerSel"></select></label>
+      <label><span data-en="Horizon">Срок</span> <select id="ipH" class="sel"><option value="10">10</option><option value="30">30</option><option value="91" selected>91</option><option value="365">365</option><option value="custom" data-en="custom">свой</option></select> <input id="ipHc" value="180" class="xs hidden"> <span data-en="days">дн.</span></label>
+      <button class="btn primary sm" id="btnIp" data-en="Pick">Подобрать</button>
+      <button class="btn sm" id="btnIpReset" data-en="↺ Restore auto-pick">↺ Вернуть автоподбор</button>
+    </div>
+    <div class="tablewrap"><table id="ipTable" class="tbl"></table></div>
+    <div id="ipTotal"></div>
+  </div>
+</section>
+
+<!-- ============================ КАЛЕНДАРЬ ============================ -->
+<section id="tab-calendar" class="tab">
+  <div class="calgrid">
+    <div class="card">
+      <div class="row wrap"><button class="btn sm" id="calPrev">◀</button><h3 id="calTitle"></h3><button class="btn sm" id="calNext">▶</button>
+        <div id="calFilters" class="row wrap"></div></div>
+      <div id="calMonth" class="month"></div>
+      <div id="calSessions" class="muted small"></div>
+    </div>
+    <div class="card"><h3 id="calDayTitle" data-en="Day details">Детали дня</h3><div id="calDay"></div>
+      <h3 data-en="Upcoming important events (14 days)">Ближайшие важные события (14 дней)</h3><div id="calUpcoming"></div></div>
+  </div>
+</section>
+
+<!-- ============================ УСРЕДНЕНИЕ ============================ -->
+<section id="tab-avg" class="tab">
+  <div class="card">
+    <h3 data-en="Position averaging">Усреднение позиции</h3>
+    <div class="row wrap">
+      <label><span data-en="Ticker">Тикер</span> <select id="avTicker" class="sel"></select></label>
+      <label><span data-en="Quantity">Количество</span> <input id="avQty" value="10"></label>
+      <label><span data-en="Average price">Средняя цена</span> <input id="avAvg" value="100"></label>
+      <label><span data-en="Broker">Брокер</span> <select id="avBroker" class="sel brokerSel"></select></label>
+    </div>
+    <h4 data-en="Additional buys">Докупки</h4>
+    <div id="avBuys"></div>
+    <div class="row wrap"><button class="btn sm" id="avAdd" data-en="+ Add buy">+ Добавить докупку</button>
+      <span class="muted" data-en="Quick price:">Быстрая цена:</span>
+      <button class="btn sm" data-q="0" data-en="current">текущая</button><button class="btn sm" data-q="3">−3%</button><button class="btn sm" data-q="5">−5%</button><button class="btn sm" data-q="10">−10%</button><button class="btn sm" data-q="20">−20%</button></div>
+    <div id="avRes"></div>
+    <div id="avScale" class="avscale"></div>
+    <div class="tablewrap"><table id="avSteps" class="tbl"></table></div>
+  </div>
+  <div class="card">
+    <h3 data-en="Reverse task: how much to buy to reach a target average">Обратная задача: сколько докупить до нужной средней</h3>
+    <div class="row wrap"><label><span data-en="Target average">Нужная средняя</span> <input id="avTarget" value="95"></label><label><span data-en="Buy price">Цена докупки</span> <input id="avTPrice" value="90"></label></div>
+    <div id="avReverse"></div>
+  </div>
+</section>
+</main>
+
+<footer class="foot" data-en="Educational tool. Signals are calculated algorithmically and are not investment advice. Data: Yahoo Finance (yfinance).">Учебный инструмент. Сигналы рассчитываются алгоритмически и не являются инвестиционной рекомендацией. Данные: Yahoo Finance (yfinance).</footer>
+
+<!-- Параметры -->
+<div class="modal hidden" id="settingsModal"><div class="mbox">
+  <h3 data-en="Indicator parameters and signal thresholds">Параметры индикаторов и пороги сигнала</h3>
+  <div id="settingsForm" class="sform"></div>
+  <h4 data-en="Factor weights">Веса факторов</h4><div id="weightsForm" class="sform"></div>
+  <h4 data-en="Time zone">Часовой пояс</h4><div class="sform"><input id="tzInput" value="Asia/Jerusalem"></div>
+  <div class="row"><button class="btn primary" id="sSave" data-en="Save">Сохранить</button><button class="btn" id="sReset" data-en="Reset">Сбросить</button><button class="btn" id="sClose" data-en="Close">Закрыть</button></div>
+</div></div>
+<div id="tip" class="tip hidden"></div>
+<div id="tour" class="tour hidden"><div class="tbox"><div id="tourText"></div><div class="row"><button class="btn sm" id="tourPrev">◀</button><span id="tourN"></span><button class="btn sm primary" id="tourNext">▶</button><button class="btn sm" id="tourEnd" data-en="Close">Закрыть</button></div></div></div>
+<div id="toast" class="toast hidden"></div>
+
+<script src="js/indicators.js"></script>
+<script src="js/candles.js"></script>
+<script src="js/data.js"></script>
+<script src="js/analysis.js"></script>
+<script src="js/chart.js"></script>
+<script src="js/app.js"></script>
+<script src="js/tabs.js"></script>
+</body>
+</html>
