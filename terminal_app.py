@@ -184,12 +184,22 @@ def _news_items(t):
 
 def news_of(t, name="", general_ok=False):
     match = news_match(t.ticker, name)
-    direct, general = [], []
-    for n in _news_items(t):
+    direct, general, seen = [], [], set()
+    items = list(_news_items(t))
+    queries = [q for q in dict.fromkeys([name, t.ticker.lstrip("^")]) if q]
+    for q in queries:  # мало новостей по тикеру — добираем поиском Yahoo по названию
+        if sum(1 for n in items if match(((n.get("content", n) if isinstance(n, dict) else {}).get("title") or ""))) >= 12:
+            break
+        try:
+            items += yf().Search(q, max_results=1, news_count=40).news or []
+        except Exception:  # noqa: BLE001
+            pass
+    for n in items:
         c = n.get("content", n) if isinstance(n, dict) else {}
         title = c.get("title")
-        if not title:
+        if not title or title in seen:
             continue
+        seen.add(title)
         pub = (c.get("provider") or {}).get("displayName") or c.get("publisher") or "Yahoo Finance"
         ts = c.get("pubDate") or c.get("providerPublishTime")
         if isinstance(ts, str):
@@ -340,13 +350,14 @@ def events(t, info):
         v = _ts_any(info.get("earningsTimestamp"))
         if v and v < now:
             ev["earnLast"] = v
+    year_ago = now - 400 * 86400  # старые дивидендные даты (например, у бумаг без дивидендов) не показываем
     ex = _ts_any(info.get("exDividendDate"))
     dv = _ts_any(info.get("dividendDate"))
-    if ex:
+    if ex and ex > year_ago:
         ev["exDiv"] = ex
-    if dv:
+    if dv and dv > year_ago:
         ev["div"] = dv
-    if num(info.get("dividendRate")):
+    if num(info.get("dividendRate")) and ("exDiv" in ev or "div" in ev):
         ev["divRate"] = num(info.get("dividendRate"))
     return ev
 
@@ -541,7 +552,8 @@ def fetch_doc(tk: str, yahoo: str, name_hint: str | None, old: dict | None, rev_
         doc["fin"] = fin
     else:
         doc["fv"] = None
-    q["ev"] = ev
+    if qt == "EQUITY":
+        q["ev"] = ev
     doc["quote"] = q
     return doc
 
