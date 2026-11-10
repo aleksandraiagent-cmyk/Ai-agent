@@ -214,8 +214,8 @@ def news_of(t, name="", general_ok=False):
         else:
             general.append({**item, "direct": False})
     out = direct[:12]
-    if not out and general_ok:
-        out = general[:12]
+    if general_ok and len(out) < 12:  # индексы, ETF, фьючерсы: добираем общими новостями рынка (категория «Рынок»)
+        out += general[:12 - len(out)]
     out.sort(key=lambda x: x["t"], reverse=True)
     return out
 
@@ -541,7 +541,7 @@ def fetch_doc(tk: str, yahoo: str, name_hint: str | None, old: dict | None, rev_
         doc["1mo"] = s
     elif old and "1mo" in old:
         doc["1mo"] = old["1mo"]
-    news = news_of(t, info.get("longName") or name, general_ok=qt in ("INDEX", "FUTURE", "CURRENCY"))
+    news = news_of(t, info.get("longName") or name, general_ok=qt in ("INDEX", "FUTURE", "CURRENCY", "ETF"))
     doc["news"] = news or (old or {}).get("news", [])
     q = build_quote(t, info, d1)
     q["type"] = qt
