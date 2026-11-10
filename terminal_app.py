@@ -822,9 +822,50 @@ def job_forex():
 
 
 # ------------------------------------------------------------------ HTTP-сервер
+def _png(w, h, pixel) -> bytes:
+    """Небольшой PNG без сторонних библиотек (значок для экрана «Домой» на iPhone)."""
+    import struct
+    import zlib
+    raw = b"".join(b"\x00" + b"".join(bytes(pixel(x, y)) for x in range(w)) for y in range(h))
+
+    def chunk(tag, data):
+        return struct.pack(">I", len(data)) + tag + data + struct.pack(">I", zlib.crc32(tag + data) & 0xFFFFFFFF)
+    return (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", w, h, 8, 2, 0, 0, 0))
+            + chunk(b"IDAT", zlib.compress(raw, 9)) + chunk(b"IEND", b""))
+
+
+_ICON = None
+
+
+def touch_icon() -> bytes:
+    """Значок 180×180: тёмный фон и три свечи (красная, зелёная, зелёная)."""
+    global _ICON  # noqa: PLW0603
+    if _ICON:
+        return _ICON
+    bg, up, dn, wick = (10, 14, 19), (34, 197, 94), (239, 68, 68), (139, 152, 165)
+    candles = [(38, 70, 120, 55, 135, dn), (78, 60, 105, 45, 118, up), (118, 35, 85, 22, 100, up)]  # x, верх тела, низ тела, тень
+
+    def px(x, y):
+        for cx, top, bot, wt, wb, col in candles:
+            if cx <= x < cx + 24 and top <= y <= bot:
+                return col
+            if cx + 11 <= x < cx + 13 and wt <= y <= wb:
+                return wick
+        if 145 <= y <= 148 and 25 <= x <= 155:
+            return wick
+        return bg
+    _ICON = _png(180, 180, px)
+    return _ICON
+
+
 def page_html() -> bytes:
     html = (APP_DIR / "index.html").read_text(encoding="utf-8")
-    inject = "<script>window.LOCAL_APP=true;</script>"
+    inject = ("<script>window.LOCAL_APP=true;</script>"
+              '<meta name="apple-mobile-web-app-capable" content="yes">'
+              '<meta name="mobile-web-app-capable" content="yes">'
+              '<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">'
+              '<meta name="apple-mobile-web-app-title" content="Терминал">'
+              '<link rel="apple-touch-icon" href="apple-touch-icon.png">')
     html = re.sub(r"<head>", "<head>" + inject, html, count=1, flags=re.I) if re.search(r"<head>", html, re.I) else inject + html
     return html.encode("utf-8")
 
@@ -848,6 +889,8 @@ class Handler(SimpleHTTPRequestHandler):
         path = unquote(urlparse(self.path).path)
         if path in ("/", "/index.html"):
             return self._send(200, page_html(), "text/html; charset=utf-8")
+        if path in ("/apple-touch-icon.png", "/apple-touch-icon-precomposed.png", "/favicon.ico"):
+            return self._send(200, touch_icon(), "image/png")
         if path == "/api/status":
             return self._json({"ok": True, "busy": {k: v for k, v in BUSY.items() if v}, "claude": claude_available(),
                                "data": str(DATA)})
@@ -953,7 +996,12 @@ def main():
     print("Терминал анализа акций — сигнал «Покупать / Продавать»")
     print("Открыт:", url)
     if args.lan:
-        print("С телефона (та же Wi-Fi сеть):", f"http://{lan_ip()}:{port}/")
+        print()
+        print("  ДЛЯ iPHONE (телефон в той же Wi-Fi сети):")
+        print("  1) Откройте в Safari:", f"http://{lan_ip()}:{port}/")
+        print("  2) Нажмите «Поделиться» → «На экран «Домой»» — появится значок «Терминал».")
+        print("  Если Windows спросит про брандмауэр — разрешите доступ в частных сетях.")
+        print()
     print("Данные:", DATA)
     print("Claude (новости Форекс):", "подключён" if claude_available() else "не подключён (нужен ANTHROPIC_API_KEY)")
     print("Не закрывайте это окно, пока работаете с терминалом.")
