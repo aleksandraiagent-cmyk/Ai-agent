@@ -36,9 +36,37 @@ from urllib.parse import parse_qs, urlparse
 
 BASE_DIR = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
 WEB_DIR = BASE_DIR / "web"
-DATA_DIR = Path(os.environ.get("TERMINAL_DATA_DIR", Path.cwd() / "terminal_data"))
+FROZEN = bool(getattr(sys, "frozen", False))
+
+
+def _writable(d: Path) -> bool:
+    try:
+        (d / "cache").mkdir(parents=True, exist_ok=True)
+        probe = d / ".write_test"
+        probe.write_text("ok", encoding="utf-8")
+        probe.unlink()
+        return True
+    except OSError:
+        return False
+
+
+def _pick_data_dir() -> Path:
+    """Папка данных: рядом с exe (или в папке запуска), иначе в профиле пользователя."""
+    candidates = []
+    if os.environ.get("TERMINAL_DATA_DIR"):
+        candidates.append(Path(os.environ["TERMINAL_DATA_DIR"]))
+    candidates.append((Path(sys.executable).resolve().parent if FROZEN else Path.cwd()) / "terminal_data")
+    home = os.environ.get("LOCALAPPDATA") or os.environ.get("APPDATA") or str(Path.home())
+    candidates.append(Path(home) / "TerminalApp" / "terminal_data")
+    candidates.append(Path(os.environ.get("TEMP", "/tmp")) / "TerminalApp" / "terminal_data")
+    for d in candidates:
+        if _writable(d):
+            return d
+    return candidates[-1]
+
+
+DATA_DIR = _pick_data_dir()
 CACHE_DIR = DATA_DIR / "cache"
-CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
 CLAUDE_MODEL = "claude-opus-5-5"
 
@@ -600,8 +628,25 @@ def main():
     ap.add_argument("--window", action="store_true", help="открыть в отдельном окне (pywebview)")
     ap.add_argument("--no-browser", action="store_true")
     args = ap.parse_args()
+    if not WEB_DIR.is_dir():
+        raise RuntimeError(f"Не найдена папка интерфейса web: {WEB_DIR}")
     host = "0.0.0.0" if args.lan else "127.0.0.1"
-    srv = ThreadingHTTPServer((host, args.port), Handler)
+    srv, port = None, args.port
+    for port in range(args.port, args.port + 20):
+        try:
+            srv = ThreadingHTTPServer((host, port), Handler)
+            break
+        except OSError:
+            if port == args.port and _already_running(port):
+                url = f"http://127.0.0.1:{port}/"
+                print("Терминал уже запущен:", url, "— открываю его в браузере.")
+                if not args.no_browser:
+                    webbrowser.open(url)
+                return
+            print(f"Порт {port} занят, пробую следующий…")
+    if srv is None:
+        raise RuntimeError(f"Все порты {args.port}–{args.port + 19} заняты. Запустите с --port 9000")
+    args.port = port
     url = f"http://127.0.0.1:{args.port}/"
     print("Терминал запущен:", url)
     if args.lan:
@@ -628,5 +673,43 @@ def main():
             print("\nОстановлено.")
 
 
+def _already_running(port: int) -> bool:
+    import urllib.request  # noqa: WPS433
+    try:
+        with urllib.request.urlopen(f"http://127.0.0.1:{port}/api/status", timeout=2) as r:
+            return b'"ok"' in r.read(200)
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def run():
+    try:
+        main()
+    except SystemExit:
+        raise
+    except BaseException as exc:  # noqa: BLE001 — показать любую ошибку, а не закрыть окно
+        if isinstance(exc, KeyboardInterrupt):
+            return
+        text = traceback.format_exc()
+        print("\n" + "=" * 60)
+        print("ОШИБКА ЗАПУСКА ТЕРМИНАЛА:")
+        print(text)
+        try:
+            log = DATA_DIR / "error.log"
+            with open(log, "a", encoding="utf-8") as f:
+                f.write(time.strftime("%Y-%m-%d %H:%M:%S ") + text + "\n")
+            print("Текст ошибки сохранён в файл:", log)
+        except OSError:
+            pass
+        print("Пришлите этот текст или скриншот этого окна.")
+        print("=" * 60)
+        if FROZEN or os.name == "nt":
+            try:
+                input("Нажмите Enter, чтобы закрыть окно…")
+            except EOFError:
+                pass
+        sys.exit(1)
+
+
 if __name__ == "__main__":
-    main()
+    run()
