@@ -1,5 +1,5 @@
 yfinance>=0.2.50
 pandas
 # необязательно:
-anthropic   # функции Claude (нужен ANTHROPIC_API_KEY)
+anthropic   # новости Форекс через Claude (нужен ANTHROPIC_API_KEY)
 pywebview   # режим --window

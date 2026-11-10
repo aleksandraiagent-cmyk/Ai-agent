@@ -1,17 +1,18 @@
 #!/usr/bin/env python3
 """
-TerminalApp — терминал анализа акций «Покупать / Продавать».
+TerminalApp — «Терминал анализа акций — сигнал «Покупать / Продавать»» на компьютере.
+
+Показывает тот же терминал, что и в Claude (app/index.html), в браузере или в отдельном окне
+и сам выполняет задачи его кнопок через Yahoo Finance (yfinance):
+  • «⟳ Обновить» — все тикеры или один (котировки 1д/1ч/5м/1мес, новости, отчётность, справедливая цена);
+  • поиск любого тикера Yahoo — загружает его отдельно (data/extra.json);
+  • «Аналитики» — рейтинги и целевые цены банков за 30 дней из Yahoo;
+  • «Новости Форекс» — сбор через Claude с веб-поиском (нужен ANTHROPIC_API_KEY), иначе — последние сохранённые.
 
 Запуск:
-    python terminal_app.py            # сервер + открыть браузер
-    python terminal_app.py --window   # отдельное окно (нужен pywebview)
-    python terminal_app.py --lan      # доступ с телефона в той же Wi-Fi сети
-    python terminal_app.py --port 8765 --no-browser
-
-Котировки, новости и рейтинги банков берутся из Yahoo Finance через yfinance
-только по кнопке «⟳ Обновить» (автообновления по расписанию нет).
-Функции Claude (новости Форекс, живой пересказ, перевод, оценка своих заголовков)
-работают, если установлен пакет `anthropic` и задан ANTHROPIC_API_KEY.
+    python terminal_app.py            # сервер + браузер
+    python terminal_app.py --window   # отдельное окно (pywebview)
+    python terminal_app.py --lan      # открыть с телефона в той же Wi-Fi сети
 
 Учебный инструмент. Не является инвестиционной рекомендацией.
 """
@@ -22,6 +23,7 @@ import json
 import math
 import os
 import re
+import shutil
 import socket
 import sys
 import threading
@@ -32,16 +34,27 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import unquote, urlparse
 
-BASE_DIR = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
-WEB_DIR = BASE_DIR / "web"
 FROZEN = bool(getattr(sys, "frozen", False))
+BASE_DIR = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
+APP_DIR = BASE_DIR / "app"                      # index.html + исходный снимок data/
+CLAUDE_MODEL = "claude-opus-5-5"
+
+# идентификаторы задач, которые присылает страница терминала (fire_trigger)
+TRIG_REFRESH = "trig_017W1ytcraAtywN9U9kUV1MV"   # «ТИКЕР: ALL» / «ТИКЕР: XXX»
+TRIG_ANY = "trig_01QLbDpYb6pWUsBrjcDyruCi"       # «ЗАПРОС: <тикер или название>»
+TRIG_ANALYSTS = "trig_01Ej9NUAUDdbufc8EKtBpXCP"
+TRIG_FOREX = "trig_0143qLYrs1opxBfZvpYQW3bG"
+
+# Yahoo-символы для тикеров терминала, у которых они отличаются
+YAHOO_MAP = {"US500": "^GSPC", "NDX": "^NDX", "LCO1": "BZ=F"}
 
 
+# ------------------------------------------------------------------ папка данных
 def _writable(d: Path) -> bool:
     try:
-        (d / "cache").mkdir(parents=True, exist_ok=True)
+        d.mkdir(parents=True, exist_ok=True)
         probe = d / ".write_test"
         probe.write_text("ok", encoding="utf-8")
         probe.unlink()
@@ -50,81 +63,234 @@ def _writable(d: Path) -> bool:
         return False
 
 
-def _pick_data_dir() -> Path:
-    """Папка данных: рядом с exe (или в папке запуска), иначе в профиле пользователя."""
-    candidates = []
+def _pick_data_root() -> Path:
+    cands = []
     if os.environ.get("TERMINAL_DATA_DIR"):
-        candidates.append(Path(os.environ["TERMINAL_DATA_DIR"]))
-    candidates.append((Path(sys.executable).resolve().parent if FROZEN else Path.cwd()) / "terminal_data")
+        cands.append(Path(os.environ["TERMINAL_DATA_DIR"]))
+    cands.append((Path(sys.executable).resolve().parent if FROZEN else Path.cwd()) / "terminal_data")
     home = os.environ.get("LOCALAPPDATA") or os.environ.get("APPDATA") or str(Path.home())
-    candidates.append(Path(home) / "TerminalApp" / "terminal_data")
-    candidates.append(Path(os.environ.get("TEMP", "/tmp")) / "TerminalApp" / "terminal_data")
-    for d in candidates:
+    cands.append(Path(home) / "TerminalApp" / "terminal_data")
+    cands.append(Path(os.environ.get("TEMP", "/tmp")) / "TerminalApp" / "terminal_data")
+    for d in cands:
         if _writable(d):
             return d
-    return candidates[-1]
+    return cands[-1]
 
 
-DATA_DIR = _pick_data_dir()
-CACHE_DIR = DATA_DIR / "cache"
-
-CLAUDE_MODEL = "claude-opus-5-5"
-
-STOCKS = ["AAPL", "MSFT", "NVDA", "TSLA", "AMZN", "GOOGL", "META", "NFLX", "AMD", "INTC",
-          "JPM", "BA", "KO", "XOM", "V", "DIS", "SPY", "QQQ", "TEVA", "CHKP", "SEDG", "TSEM", "SPCX"]
-CRYPTO = ["BTC", "ETH", "SOL", "XRP", "BNB", "DOGE"]
-ALL_TICKERS = STOCKS + CRYPTO
-ANALYST_TICKERS = [t for t in STOCKS if t not in ("SPY", "QQQ")]  # 21 акция
-
-FOREX_INSTRUMENTS = {
-    "EURUSD": "EURUSD=X", "GBPUSD": "GBPUSD=X", "USDJPY": "USDJPY=X", "AUDUSD": "AUDUSD=X",
-    "USDCHF": "USDCHF=X", "USDCAD": "USDCAD=X", "NZDUSD": "NZDUSD=X", "XAUUSD": "GC=F",
-    "BRENT": "BZ=F", "SPX500": "^GSPC", "NAS100": "^NDX", "BTCUSD": "BTC-USD",
-    "SEDG": "SEDG", "SPCX": "SPCX", "TSEM": "TSEM",
-}
-
-HISTORY_PLAN = [  # (ключ, период, интервал)
-    ("1d", "5y", "1d"),
-    ("1h", "730d", "1h"),
-    ("5m", "30d", "5m"),
-    ("1mo", "max", "1mo"),
-]
+DATA_ROOT = _pick_data_root()
+DATA = DATA_ROOT / "data"
 
 
-def yahoo_symbol(sym: str) -> str:
-    sym = sym.upper().strip()
-    if sym in CRYPTO:
-        return f"{sym}-USD"
-    return sym
+def seed_data():
+    """При первом запуске кладём снимок данных из Claude, чтобы терминал сразу был с котировками."""
+    DATA.mkdir(parents=True, exist_ok=True)
+    src = APP_DIR / "data"
+    if not src.is_dir():
+        return
+    for f in src.glob("*.json"):
+        dst = DATA / f.name
+        if not dst.exists():
+            shutil.copyfile(f, dst)
 
 
-def is_crypto(sym: str) -> bool:
-    s = sym.upper()
-    return s in CRYPTO or s.endswith("-USD")
+def log(*a):
+    print(time.strftime("%H:%M:%S"), *a, flush=True)
 
 
-def _yf():
+def load_json(p: Path, default=None):
     try:
-        import yfinance as yf  # noqa: WPS433
-        return yf
-    except ImportError as exc:  # pragma: no cover
-        raise RuntimeError("Не установлен yfinance: pip install yfinance") from exc
+        return json.loads(p.read_text(encoding="utf-8"))
+    except Exception:  # noqa: BLE001
+        return default
 
 
-def _num(v):
+def save_json(p: Path, obj):
+    tmp = p.with_suffix(".tmp")
+    tmp.write_text(json.dumps(obj, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+    os.replace(tmp, p)
+
+
+# ------------------------------------------------------------------ yfinance: общие функции
+def yf():
+    import yfinance  # noqa: WPS433
+    return yfinance
+
+
+def num(x):
     try:
-        if v is None:
-            return None
-        f = float(v)
-        if math.isnan(f) or math.isinf(f):
-            return None
-        return f
-    except (TypeError, ValueError):
+        x = float(x)
+        return x if math.isfinite(x) else None
+    except Exception:  # noqa: BLE001
         return None
 
 
-def _ts(v):
-    """Любую дату → unix seconds (UTC)."""
+def r6(v):
+    v = float(v)
+    return round(v, 6 if abs(v) < 1 else 4)
+
+
+def series(t, period, interval, keep, daily=False):
+    try:
+        h = t.history(period=period, interval=interval, auto_adjust=False, actions=False, prepost=False)
+    except Exception:  # noqa: BLE001
+        return None
+    if h is None or not len(h):
+        return None
+    h = h.dropna(subset=["Open", "High", "Low", "Close"]).tail(keep)
+
+    def ts(ix):
+        if daily:  # дневки и месячные — полночь UTC календарной даты (как в выгрузке Claude)
+            return int(datetime(ix.year, ix.month, ix.day, tzinfo=timezone.utc).timestamp())
+        return int(ix.timestamp())
+
+    return {
+        "t": [ts(ix) for ix in h.index],
+        "o": [r6(v) for v in h["Open"]], "h": [r6(v) for v in h["High"]],
+        "l": [r6(v) for v in h["Low"]], "c": [r6(v) for v in h["Close"]],
+        "v": [int(v) if num(v) else 0 for v in h["Volume"]],
+    }
+
+
+_SUFFIX = {"inc", "corp", "corporation", "co", "ltd", "plc", "ag", "sa", "nv", "se", "group", "holdings",
+           "company", "technologies", "the", "etf", "trust", "fund", "usd", "class", "a", "b", "ishares",
+           "invesco", "spdr"}
+
+
+def news_match(sym, name):
+    """Новость про бумагу — только если она названа в заголовке: тикер или главное слово названия."""
+    base = sym.split("-")[0].split(".")[0].lstrip("^").split("=")[0]
+    words = [w for w in re.findall(r"[A-Za-z][A-Za-z&'\-]+", name or "") if w.lower().strip(".") not in _SUFFIX]
+    pats = []
+    if words:
+        pats.append(re.compile(r"(?<!\w)" + re.escape(words[0]) + r"(?!\w)", re.I))
+    if len(base) >= 2:
+        pats.append(re.compile(r"(?<![\w$])\$?" + re.escape(base) + r"(?!\w)"))
+    return lambda title: any(p.search(title) for p in pats) if pats else True
+
+
+def _news_items(t):
+    items = []
+    try:
+        items = t.get_news(count=40) if hasattr(t, "get_news") else (t.news or [])
+    except Exception:  # noqa: BLE001
+        items = []
+    if not items:
+        try:
+            items = yf().Search(t.ticker, max_results=1, news_count=40).news or []
+        except Exception:  # noqa: BLE001
+            items = []
+    return items
+
+
+def news_of(t, name="", general_ok=False):
+    match = news_match(t.ticker, name)
+    direct, general = [], []
+    for n in _news_items(t):
+        c = n.get("content", n) if isinstance(n, dict) else {}
+        title = c.get("title")
+        if not title:
+            continue
+        pub = (c.get("provider") or {}).get("displayName") or c.get("publisher") or "Yahoo Finance"
+        ts = c.get("pubDate") or c.get("providerPublishTime")
+        if isinstance(ts, str):
+            try:
+                ts = int(datetime.fromisoformat(ts.replace("Z", "+00:00")).timestamp())
+            except Exception:  # noqa: BLE001
+                ts = int(time.time())
+        link = ((c.get("canonicalUrl") or {}).get("url") or (c.get("clickThroughUrl") or {}).get("url") or c.get("link") or "")
+        item = {"title": title, "pub": pub, "t": int(ts or time.time()), "link": link if link.startswith("https://") else ""}
+        if match(title):
+            direct.append({**item, "direct": True})
+        else:
+            general.append({**item, "direct": False})
+    out = direct[:12]
+    if not out and general_ok:
+        out = general[:12]
+    out.sort(key=lambda x: x["t"], reverse=True)
+    return out
+
+
+def fair_value(info, price):
+    eps, feps, bv = num(info.get("trailingEps")), num(info.get("forwardEps")), num(info.get("bookValue"))
+    sh = num(info.get("sharesOutstanding"))
+    fcf, cash, debt = num(info.get("freeCashflow")), num(info.get("totalCash")), num(info.get("totalDebt"))
+    fcfps = fcf / sh if fcf and sh else None
+    netcash = (cash or 0) - (debt or 0) if (cash is not None or debt is not None) else None
+    netcashps = netcash / sh if netcash is not None and sh else None
+    g = num(info.get("earningsGrowth"))
+    if (g is None or g <= 0) and eps and feps and eps > 0:
+        g = feps / eps - 1
+    g = min(max(g or 0.05, 0.02), 0.25)
+    m = {}
+    if eps and bv and eps > 0 and bv > 0:
+        m["graham"] = math.sqrt(22.5 * eps * bv)
+    if fcfps and fcfps > 0:
+        r, tg, v, f = 0.09, 0.03, 0, fcfps
+        for y in range(1, 11):
+            f *= 1 + (g if y <= 5 else g / 2)
+            v += f / (1 + r) ** y
+        v += f * (1 + tg) / (r - tg) / (1 + r) ** 10
+        m["dcf"] = v + (netcashps or 0)
+    base = feps if feps and feps > 0 else eps
+    if base and base > 0:
+        m["lynch"] = base * g * 100
+    a = {"mean": num(info.get("targetMeanPrice")), "median": num(info.get("targetMedianPrice")),
+         "low": num(info.get("targetLowPrice")), "high": num(info.get("targetHighPrice")),
+         "n": int(info.get("numberOfAnalystOpinions") or 0), "rec": info.get("recommendationKey") or "none"}
+    if a["median"] or a["mean"]:
+        m["analysts"] = a["median"] or a["mean"]
+    if not m:
+        return None
+    w = {"analysts": .4, "dcf": .25, "lynch": .2, "graham": .15}
+    fair = sum(m[k] * w[k] for k in m) / sum(w[k] for k in m)
+    return {"fair": round(fair, 4), "lo": round(min(m.values()), 4), "hi": round(max(m.values()), 4),
+            "models": {k: round(v, 4) for k, v in m.items()},
+            "analysts": a if a["n"] else None, "growth": round(g, 4),
+            "inputs": {"eps": eps, "feps": feps, "bv": bv, "pe": num(info.get("trailingPE")), "fpe": num(info.get("forwardPE")),
+                       "fcfps": fcfps, "netcashps": netcashps}}
+
+
+def _ext_session(t):
+    """Премаркет и постмаркет по 5-минуткам с расширенными часами."""
+    out = {}
+    try:
+        h = t.history(period="5d", interval="5m", prepost=True, auto_adjust=False, actions=False)
+        if h is None or not len(h):
+            return out
+        h = h.tz_convert("America/New_York")
+        days = sorted({ix.date() for ix in h.index})
+        for key, cond in (("pre", lambda ix: ix.hour * 60 + ix.minute < 570),
+                          ("post", lambda ix: ix.hour * 60 + ix.minute >= 960)):
+            for d in reversed(days):
+                part = h[[ix.date() == d and cond(ix) for ix in h.index]]
+                if len(part):
+                    out[key] = {"price": r6(part["Close"].iloc[-1]), "t": int(part.index[-1].timestamp()) + 300,
+                                "hi": r6(part["High"].max()), "lo": r6(part["Low"].min()), "vol": 0}
+                    break
+    except Exception:  # noqa: BLE001
+        pass
+    return out
+
+
+def build_quote(t, info, d1):
+    price = num(info.get("regularMarketPrice")) or (d1["c"][-1] if d1 else None)
+    q = {"state": info.get("marketState") or "CLOSED", "type": info.get("quoteType") or "EQUITY", "price": price,
+         "prev": num(info.get("regularMarketPreviousClose")) or (d1["c"][-2] if d1 and len(d1["c"]) > 1 else price),
+         "t": int(info.get("regularMarketTime") or (d1["t"][-1] if d1 else time.time())), "cur": info.get("currency") or "USD"}
+    ext = _ext_session(t)
+    for k, pk, tk in (("pre", "preMarketPrice", "preMarketTime"), ("post", "postMarketPrice", "postMarketTime")):
+        p = num(info.get(pk))
+        if k in ext:
+            if p:
+                ext[k]["price"] = p
+                ext[k]["t"] = int(info.get(tk) or ext[k]["t"])
+            q[k] = ext[k]
+        elif p:
+            q[k] = {"price": p, "t": int(info.get(tk) or 0), "hi": p, "lo": p, "vol": 0}
+    return q
+
+
+def _ts_any(v):
     if v is None:
         return None
     try:
@@ -134,271 +300,456 @@ def _ts(v):
             if getattr(v, "tzinfo", None) is None and isinstance(v, datetime):
                 v = v.replace(tzinfo=timezone.utc)
             return int(v.timestamp())
-        if hasattr(v, "isoformat"):  # date
+        if hasattr(v, "year"):
             return int(datetime(v.year, v.month, v.day, tzinfo=timezone.utc).timestamp())
-        return int(datetime.fromisoformat(str(v).replace("Z", "+00:00")).timestamp())
-    except Exception:
-        return None
-
-
-def df_to_candles(df):
-    out = []
-    if df is None or len(df) == 0:
-        return out
-    for idx, row in df.iterrows():
-        o, h, l, c = (_num(row.get(k)) for k in ("Open", "High", "Low", "Close"))
-        if None in (o, h, l, c):
-            continue
-        v = _num(row.get("Volume")) or 0.0
-        out.append([int(idx.timestamp()), round(o, 6), round(h, 6), round(l, 6), round(c, 6), round(v)])
-    return out
-
-
-def parse_news(items, sym: str, name: str | None):
-    """Только новости, где бумага названа в самом заголовке."""
-    res = []
-    keys = {sym.upper().replace("-USD", "")}
-    if name:
-        first = re.split(r"[ ,.]", name)[0]
-        if len(first) > 2 and first.lower() not in ("the", "invesco", "spdr", "ishares"):
-            keys.add(first)
-    crypto_names = {"BTC": "Bitcoin", "ETH": "Ethereum", "SOL": "Solana", "XRP": "XRP",
-                    "BNB": "BNB", "DOGE": "Dogecoin"}
-    if sym.upper() in crypto_names:
-        keys.add(crypto_names[sym.upper()])
-    for it in items or []:
-        c = it.get("content") if isinstance(it, dict) and "content" in it else it
-        if not isinstance(c, dict):
-            continue
-        title = c.get("title") or ""
-        if not title:
-            continue
-        publisher = (c.get("provider") or {}).get("displayName") if isinstance(c.get("provider"), dict) else c.get("publisher")
-        link = (c.get("canonicalUrl") or {}).get("url") if isinstance(c.get("canonicalUrl"), dict) else c.get("link")
-        t = _ts(c.get("pubDate") or c.get("displayTime")) or _ts(c.get("providerPublishTime"))
-        mentioned = any(re.search(r"(?<![A-Za-z])" + re.escape(k) + r"(?![A-Za-z])", title, re.I if len(k) > 4 else 0)
-                        for k in keys)
-        res.append({"title": title, "publisher": publisher or "", "time": t, "link": link or "",
-                    "mentioned": bool(mentioned)})
-    res.sort(key=lambda x: x["time"] or 0, reverse=True)
-    return res
-
-
-# ---------------------------------------------------------------- загрузка тикера
-def fetch_ticker(sym: str, light: bool = False) -> dict:
-    yf = _yf()
-    ysym = yahoo_symbol(sym)
-    t = yf.Ticker(ysym)
-    candles = {}
-    for key, period, interval in HISTORY_PLAN:
-        if light and key not in ("1d", "1h"):
-            continue
-        try:
-            df = t.history(period=period, interval=interval, auto_adjust=False, prepost=False)
-            candles[key] = df_to_candles(df)
-        except Exception as exc:  # noqa: BLE001
-            candles[key] = []
-            print(f"[{sym}] {interval}: {exc}")
-    info = {}
-    try:
-        info = t.info or {}
-    except Exception as exc:  # noqa: BLE001
-        print(f"[{sym}] info: {exc}")
-    name = info.get("longName") or info.get("shortName") or sym
-    quote = {
-        "price": _num(info.get("regularMarketPrice") or info.get("currentPrice")),
-        "prevClose": _num(info.get("regularMarketPreviousClose") or info.get("previousClose")),
-        "regTime": _ts(info.get("regularMarketTime")),
-        "pre": _num(info.get("preMarketPrice")), "preTime": _ts(info.get("preMarketTime")),
-        "preChange": _num(info.get("preMarketChangePercent")),
-        "post": _num(info.get("postMarketPrice")), "postTime": _ts(info.get("postMarketTime")),
-        "postChange": _num(info.get("postMarketChangePercent")),
-        "marketState": info.get("marketState"),
-        "currency": info.get("currency", "USD"),
-    }
-    fundamentals = {k: _num(info.get(k)) for k in (
-        "targetMeanPrice", "targetLowPrice", "targetHighPrice", "targetMedianPrice",
-        "numberOfAnalystOpinions", "recommendationMean", "trailingEps", "forwardEps",
-        "earningsGrowth", "revenueGrowth", "bookValue", "freeCashflow", "sharesOutstanding",
-        "dividendRate", "dividendYield", "trailingPE", "forwardPE", "pegRatio", "marketCap",
-        "fiftyTwoWeekHigh", "fiftyTwoWeekLow", "beta")}
-    fundamentals["recommendationKey"] = info.get("recommendationKey")
-    fundamentals["sector"] = info.get("sector")
-    fundamentals["industry"] = info.get("industry")
-    events = {"earnings": [], "exDividend": None, "dividendDate": None}
-    try:
-        cal = t.calendar
-        if isinstance(cal, dict):
-            events["earnings"] = [_ts(x) for x in (cal.get("Earnings Date") or []) if _ts(x)]
-            events["exDividend"] = _ts(cal.get("Ex-Dividend Date"))
-            events["dividendDate"] = _ts(cal.get("Dividend Date"))
     except Exception:  # noqa: BLE001
-        pass
-    if not events["exDividend"]:
-        events["exDividend"] = _ts(info.get("exDividendDate"))
-    news = []
-    try:
-        raw = t.get_news(count=30) if hasattr(t, "get_news") else t.news
-        news = parse_news(raw, sym, name)
-    except Exception as exc:  # noqa: BLE001
-        print(f"[{sym}] news: {exc}")
-    return {
-        "symbol": sym.upper(), "yahoo": ysym, "name": name,
-        "kind": "crypto" if is_crypto(sym) else "stock",
-        "candles": candles, "quote": quote, "fundamentals": fundamentals,
-        "events": events, "news": news, "updated": int(time.time()), "source": "yahoo",
-    }
-
-
-def cache_path(sym: str) -> Path:
-    return CACHE_DIR / (re.sub(r"[^A-Za-z0-9_.^=-]", "_", sym.upper()) + ".json")
-
-
-def save_cache(sym: str, data: dict):
-    p = cache_path(sym)
-    tmp = p.with_suffix(".tmp")
-    tmp.write_text(json.dumps(data, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
-    tmp.replace(p)
-
-
-def load_cache(sym: str):
-    p = cache_path(sym)
-    if p.exists():
-        try:
-            return json.loads(p.read_text(encoding="utf-8"))
-        except Exception:  # noqa: BLE001
-            return None
+        return None
     return None
 
 
-# ---------------------------------------------------------------- фоновые задачи
-class Job:
-    def __init__(self, name):
-        self.name = name
-        self.lock = threading.Lock()
-        self.state = {"name": name, "running": False, "done": 0, "total": 0, "errors": [],
-                      "started": None, "finished": None, "message": ""}
-
-    def snapshot(self):
-        with self.lock:
-            return dict(self.state)
-
-    def start(self, total, target):
-        with self.lock:
-            if self.state["running"]:
-                return False
-            self.state.update(running=True, done=0, total=total, errors=[], started=int(time.time()),
-                              finished=None, message="")
-        threading.Thread(target=self._run, args=(target,), daemon=True).start()
-        return True
-
-    def _run(self, target):
+def events(t, info):
+    now = time.time()
+    ev = {}
+    earn = None
+    for k in ("earningsTimestampStart", "earningsTimestamp", "earningsTimestampEnd"):
+        v = _ts_any(info.get(k))
+        if v and v > now - 86400:
+            earn = v
+            break
+    if not earn:
         try:
-            target(self)
-        except Exception as exc:  # noqa: BLE001
-            traceback.print_exc()
-            self.error(str(exc))
-        finally:
-            with self.lock:
-                self.state["running"] = False
-                self.state["finished"] = int(time.time())
-
-    def step(self, msg=""):
-        with self.lock:
-            self.state["done"] += 1
-            self.state["message"] = msg
-
-    def error(self, msg):
-        with self.lock:
-            self.state["errors"].append(msg)
-
-
-JOBS = {"refresh": Job("refresh"), "analysts": Job("analysts"), "forex": Job("forex")}
-EXTRA_TICKERS_FILE = DATA_DIR / "extra_tickers.json"
-
-
-def extra_tickers():
+            cal = t.calendar or {}
+            for d in cal.get("Earnings Date") or []:
+                v = _ts_any(d)
+                if v and v > now - 86400:
+                    earn = v
+                    break
+        except Exception:  # noqa: BLE001
+            pass
+    if earn:
+        ev["earn"] = earn
+        ev["earnEst"] = bool(info.get("isEarningsDateEstimate", info.get("earningsTimestampStart") != info.get("earningsTimestampEnd")))
     try:
-        return json.loads(EXTRA_TICKERS_FILE.read_text(encoding="utf-8"))
+        ed = t.get_earnings_dates(limit=12)
+        past = [int(ix.timestamp()) for ix in ed.index if ix.timestamp() < now] if ed is not None else []
+        if past:
+            ev["earnLast"] = max(past)
     except Exception:  # noqa: BLE001
-        return []
+        pass
+    if "earnLast" not in ev:
+        v = _ts_any(info.get("earningsTimestamp"))
+        if v and v < now:
+            ev["earnLast"] = v
+    ex = _ts_any(info.get("exDividendDate"))
+    dv = _ts_any(info.get("dividendDate"))
+    if ex:
+        ev["exDiv"] = ex
+    if dv:
+        ev["div"] = dv
+    if num(info.get("dividendRate")):
+        ev["divRate"] = num(info.get("dividendRate"))
+    return ev
 
 
-def add_extra_ticker(sym):
-    lst = extra_tickers()
-    if sym not in lst and sym not in ALL_TICKERS:
-        lst.append(sym)
-        EXTRA_TICKERS_FILE.write_text(json.dumps(lst), encoding="utf-8")
+# ------------------------------------------------------------------ финансовая отчётность (блок fin)
+def _stmt(df, rows, n):
+    if df is None or not len(df.columns):
+        return None
+    cols = list(df.columns)[:n]
+    out = {"p": [c.strftime("%Y-%m-%d") for c in cols]}
+    for key, names in rows.items():
+        vals = None
+        for nm in names:
+            if nm in df.index:
+                vals = [num(df.loc[nm, c]) for c in cols]
+                break
+        out[key] = vals if vals is not None else [None] * len(cols)
+    return out
 
 
-def refresh_all(job: Job):
-    tickers = ALL_TICKERS + extra_tickers()
+IS_ROWS = {"rev": ["Total Revenue", "Operating Revenue"], "gp": ["Gross Profit"], "op": ["Operating Income"],
+           "ni": ["Net Income", "Net Income Common Stockholders"], "eps": ["Diluted EPS", "Basic EPS"],
+           "ebitda": ["EBITDA", "Normalized EBITDA"], "rd": ["Research And Development"]}
+BS_ROWS = {"assets": ["Total Assets"], "liab": ["Total Liabilities Net Minority Interest"],
+           "eq": ["Stockholders Equity", "Common Stock Equity"],
+           "cash": ["Cash And Cash Equivalents", "Cash Cash Equivalents And Short Term Investments"], "debt": ["Total Debt"]}
+CF_ROWS = {"ocf": ["Operating Cash Flow"], "capex": ["Capital Expenditure"], "fcf": ["Free Cash Flow"]}
 
-    def one(sym):
+
+def _qend(d):
+    """Конец календарного квартала, в который попадает дата d."""
+    m = ((d.month - 1) // 3 + 1) * 3
+    nxt = datetime(d.year + (m == 12), (m % 12) + 1, 1, tzinfo=timezone.utc)
+    return nxt - timedelta(days=1)
+
+
+def _prev_qend(d):
+    """Последний конец квартала, который строго раньше даты d."""
+    start = datetime(d.year, ((d.month - 1) // 3) * 3 + 1, 1, tzinfo=timezone.utc)
+    return start - timedelta(days=1)
+
+
+def _fq(end, fy_end_month):
+    if not fy_end_month:
+        return ""
+    q = ((end.month - fy_end_month - 1) % 12) // 3 + 1
+    y = end.year if end.month <= fy_end_month else end.year + 1
+    return f"{q}Q{y}"
+
+
+def _est_table(df):
+    if df is None or not len(df):
+        return None
+    out = {}
+    for period, row in df.iterrows():
+        out[str(period)] = {str(k): num(v) for k, v in row.items() if num(v) is not None}
+    return out
+
+
+def build_fin(t, info, old_fin, rev_hist):
+    fin = {}
+    old_fin = old_fin or {}
+
+    def part(name, fn):
         try:
-            save_cache(sym, fetch_ticker(sym))
-            job.step(sym)
+            v = fn()
+            if v:
+                fin[name] = v
+                return
         except Exception as exc:  # noqa: BLE001
-            job.error(f"{sym}: {exc}")
-            job.step(sym)
+            log(f"   {t.ticker} fin.{name}: {exc}")
+        if name in old_fin:
+            fin[name] = old_fin[name]
 
-    with ThreadPoolExecutor(max_workers=4) as pool:
-        list(pool.map(one, tickers))
+    part("q", lambda: {k: v for k, v in (("is", _stmt(t.quarterly_income_stmt, IS_ROWS, 6)),
+                                          ("bs", _stmt(t.quarterly_balance_sheet, BS_ROWS, 7)),
+                                          ("cf", _stmt(t.quarterly_cashflow, CF_ROWS, 7))) if v})
+    part("a", lambda: {k: v for k, v in (("is", _stmt(t.income_stmt, IS_ROWS, 4)),
+                                          ("bs", _stmt(t.balance_sheet, BS_ROWS, 4)),
+                                          ("cf", _stmt(t.cashflow, CF_ROWS, 4))) if v})
+
+    def eh():
+        df = t.earnings_history
+        if df is None or not len(df):
+            return None
+        rows = []
+        for ix, r in df.iterrows():
+            q = ix.strftime("%Y-%m-%d") if hasattr(ix, "strftime") else str(ix)[:10]
+            sp = num(r.get("surprisePercent"))
+            rows.append({"q": q, "est": num(r.get("epsEstimate")), "act": num(r.get("epsActual")), "sp": sp})
+        rows.sort(key=lambda x: x["q"])
+        return rows[-5:]
+    part("eh", eh)
+
+    fy_ts = _ts_any(info.get("lastFiscalYearEnd"))
+    fy_m = datetime.fromtimestamp(fy_ts, timezone.utc).month if fy_ts else None
+
+    def rel():
+        ed = t.get_earnings_dates(limit=16)
+        if ed is None or not len(ed):
+            return None
+        now = time.time()
+        rows = []
+        for ix, r in ed.iterrows():
+            rd = int(ix.timestamp())
+            if rd > now:
+                continue
+            act, est = num(r.get("Reported EPS")), num(r.get("EPS Estimate"))
+            sp = num(r.get("Surprise(%)"))
+            end = _prev_qend(datetime.fromtimestamp(rd, timezone.utc) - timedelta(days=10))
+            end_d = datetime(end.year, end.month, end.day, tzinfo=timezone.utc)
+            rows.append({"rd": rd, "end": int(end_d.timestamp()), "cq": f"{(end_d.month - 1) // 3 + 1}Q{end_d.year}",
+                         "fq": _fq(end_d, fy_m), "act": act, "est": est, "sp": sp / 100 if sp is not None else None})
+        rows.sort(key=lambda x: x["rd"])
+        return rows[-5:]
+    part("rel", rel)
+
+    def est():
+        e = {"eps": _est_table(t.earnings_estimate), "rev": _est_table(t.revenue_estimate)}
+        return {k: v for k, v in e.items() if v}
+    part("est", est)
+
+    ev = events(t, info)
+    E = fin.get("est") or {}
+
+    def nxt():
+        last_end = max([r["end"] for r in fin.get("rel") or []] or [0])
+        base = datetime.fromtimestamp(last_end, timezone.utc) if last_end else datetime.now(timezone.utc) - timedelta(days=60)
+        end = _qend(base + timedelta(days=45))
+        e0, r0 = (E.get("eps") or {}).get("0q") or {}, (E.get("rev") or {}).get("0q") or {}
+        return {"rd": ev.get("earn"), "estDate": bool(ev.get("earnEst")),
+                "end": int(datetime(end.year, end.month, end.day, tzinfo=timezone.utc).timestamp()),
+                "cq": "", "fq": "", "epsAvg": e0.get("avg"), "epsLow": e0.get("low"), "epsHigh": e0.get("high"),
+                "revAvg": r0.get("avg"), "revLow": r0.get("low"), "revHigh": r0.get("high")}
+    part("next", nxt)
+
+    g = lambda k: num(info.get(k))  # noqa: E731
+    fin["r"] = {k: v for k, v in {
+        "mcap": g("marketCap"), "ev": g("enterpriseValue"), "pe": g("trailingPE"), "fpe": g("forwardPE"),
+        "peg": g("trailingPegRatio") or g("pegRatio"), "pb": g("priceToBook"), "ps": g("priceToSalesTrailing12Months"),
+        "gm": g("grossMargins"), "om": g("operatingMargins"), "pm": g("profitMargins"), "roe": g("returnOnEquity"),
+        "roa": g("returnOnAssets"), "de": g("debtToEquity"), "cr": g("currentRatio"), "rg": g("revenueGrowth"),
+        "eg": g("earningsGrowth"), "dy": g("dividendYield"), "pr": g("payoutRatio"), "beta": g("beta"),
+        "revTtm": g("totalRevenue"), "fcfTtm": g("freeCashflow"), "epsTtm": g("trailingEps"), "epsFwd": g("forwardEps"),
+    }.items() if v is not None} or old_fin.get("r", {})
+
+    # история прогнозов выручки по кварталам: нужна, чтобы после отчёта сравнить факт с ожиданием
+    hist = dict(rev_hist or {})
+    hist.update(old_fin.get("revEst") or {})
+    nx = fin.get("next") or {}
+    if nx.get("end") and nx.get("revAvg"):
+        key = datetime.fromtimestamp(nx["end"], timezone.utc).strftime("%Y-%m-%d")
+        hist[key] = {"avg": nx["revAvg"], "t": int(time.time())}
+    if hist:
+        fin["revEst"] = dict(sorted(hist.items())[-8:])
+    return fin, ev
 
 
-# ---------------------------------------------------------------- аналитики
-def collect_analysts(job: Job):
-    yf = _yf()
-    out = {"updated": int(time.time()), "items": []}
+# ------------------------------------------------------------------ выгрузка одного тикера
+def fetch_doc(tk: str, yahoo: str, name_hint: str | None, old: dict | None, rev_hist=None) -> dict:
+    t = yf().Ticker(yahoo)
+    try:
+        info = t.info or {}
+    except Exception:  # noqa: BLE001
+        info = {}
+    qt = info.get("quoteType") or ((old or {}).get("quote") or {}).get("type") or "EQUITY"
+    d1 = series(t, "5y", "1d", 1255, daily=True)
+    if not d1 or len(d1["t"]) < 60:
+        raise RuntimeError("Yahoo не вернул дневную историю")
+    name = name_hint or (old or {}).get("name") or info.get("longName") or info.get("shortName") or yahoo
+    mkt = (old or {}).get("mkt") or ("CR" if qt == "CRYPTOCURRENCY" else "CM" if qt == "FUTURE" else "US")
+    doc = {"tk": tk, "yahoo": yahoo, "name": name, "mkt": mkt, "updated": int(time.time()), "1d": d1}
+    for key, per, iv in (("1h", "730d", "1h"), ("5m", "60d", "5m")):
+        s = series(t, per, iv, 1500)
+        if s and len(s["t"]) >= 60:
+            doc[key] = s
+        elif old and key in old:
+            doc[key] = old[key]
+    s = series(t, "max", "1mo", 100000, daily=True)
+    if s and len(s["t"]) >= 12:
+        doc["1mo"] = s
+    elif old and "1mo" in old:
+        doc["1mo"] = old["1mo"]
+    news = news_of(t, info.get("longName") or name, general_ok=qt in ("INDEX", "FUTURE", "CURRENCY"))
+    doc["news"] = news or (old or {}).get("news", [])
+    q = build_quote(t, info, d1)
+    q["type"] = qt
+    ev = {}
+    if qt == "EQUITY":
+        fin, ev = build_fin(t, info, (old or {}).get("fin"), rev_hist)
+        doc["fv"] = fair_value(info, q["price"])
+        doc["fin"] = fin
+    else:
+        doc["fv"] = None
+    q["ev"] = ev
+    doc["quote"] = q
+    return doc
+
+
+def index_entry(doc, old_entry):
+    e = {"name": (old_entry or {}).get("name") or doc["name"], "mkt": doc["mkt"], "last": doc["quote"]["price"],
+         "type": doc["quote"]["type"], "intervals": [k for k in ("1d", "1h", "5m", "1mo") if k in doc],
+         "news": len(doc.get("news") or [])}
+    if doc["quote"].get("ev"):
+        e["ev"] = doc["quote"]["ev"]
+    if (doc.get("fin") or {}).get("revEst"):
+        e["revEst"] = doc["fin"]["revEst"]
+    return e
+
+
+# ------------------------------------------------------------------ задачи кнопок
+JOB_LOCK = threading.Lock()
+BUSY = {}
+
+
+def run_job(name, fn, *a):
+    with JOB_LOCK:
+        if BUSY.get(name):
+            return False
+        BUSY[name] = True
+
+    def wrap():
+        try:
+            fn(*a)
+        except Exception:  # noqa: BLE001
+            log(f"Ошибка задачи «{name}»:\n" + traceback.format_exc())
+        finally:
+            BUSY[name] = False
+    threading.Thread(target=wrap, daemon=True).start()
+    return True
+
+
+def job_refresh(which: str):
+    idx = load_json(DATA / "index.json", {"tickers": {}}) or {"tickers": {}}
+    tickers = idx.get("tickers") or {}
+    extra = (load_json(DATA / "extra.json", {}) or {}).get("tickers") or {}
+    if which != "ALL":
+        if which in extra and which not in tickers:
+            return job_any(extra[which].get("yahoo") or which)
+        if which not in tickers:
+            log(f"Тикера {which} нет в списке терминала")
+            return
+        names = [which]
+    else:
+        names = list(tickers)
+    log(f"Обновление котировок Yahoo: {len(names)} тикеров…")
+    t0 = time.time()
+    done, fails = [], []
+
+    def one(tk):
+        old = load_json(DATA / f"{tk}.json")
+        yahoo = (old or {}).get("yahoo") or YAHOO_MAP.get(tk, tk)
+        try:
+            doc = fetch_doc(tk, yahoo, (tickers.get(tk) or {}).get("name"), old, (tickers.get(tk) or {}).get("revEst"))
+            save_json(DATA / f"{tk}.json", doc)
+            done.append(tk)
+            log(f"  ✓ {tk} ({len(done)}/{len(names)})")
+            return tk, doc
+        except Exception as exc:  # noqa: BLE001
+            fails.append(tk)
+            log(f"  ✗ {tk}: {exc}")
+            return tk, None
+
+    with ThreadPoolExecutor(max_workers=3) as pool:
+        results = list(pool.map(one, names))
+    if which == "ALL" and done:
+        new_t = {}
+        for tk, doc in results:
+            new_t[tk] = index_entry(doc, tickers.get(tk)) if doc else tickers.get(tk)
+        idx = {"updated": int(time.time()), "source": "Yahoo Finance (yfinance)", "tickers": new_t}
+        save_json(DATA / "index.json", idx)
+    log(f"Готово: обновлено {len(done)} из {len(names)} за {int(time.time() - t0)} с"
+        + (f"; не удалось: {', '.join(fails)}" if fails else ""))
+
+
+def _resolve(q):
+    q = q.strip()
+    cand = q.upper().replace(" ", "")
+    if re.fullmatch(r"[A-Z0-9.\-=^]{1,15}", cand):
+        try:
+            if len(yf().Ticker(cand).history(period="5d")):
+                return cand
+        except Exception:  # noqa: BLE001
+            pass
+    try:
+        res = yf().Search(q, max_results=8, news_count=0).quotes
+    except Exception:  # noqa: BLE001
+        res = []
+    for r in res:
+        if r.get("symbol") and r.get("quoteType") in ("EQUITY", "ETF", "CRYPTOCURRENCY", "INDEX", "CURRENCY", "FUTURE", "MUTUALFUND"):
+            return r["symbol"]
+    return res[0]["symbol"] if res and res[0].get("symbol") else None
+
+
+def _extra_save(mut):
+    xp = DATA / "extra.json"
+    ex = load_json(xp, None) or {"v": 1, "tickers": {}}
+    mut(ex)
+    ex["updated"] = int(time.time())
+    save_json(xp, ex)
+
+
+def job_any(query: str):
+    query = re.sub(r"[^\w .&\-=^]", "", query.strip())[:60].strip()
+    if not query:
+        return
+    log(f"Поиск тикера «{query}» на Yahoo…")
+    sym = _resolve(query)
+    if not sym:
+        _extra_save(lambda ex: ex.setdefault("fail", {}).__setitem__(query.lower(), {"t": int(time.time()), "err": "не найден на Yahoo"}))
+        log(f"  «{query}» не найден на Yahoo")
+        return
+    tk = re.sub(r"[^A-Z0-9]", "", sym.upper())[:14] or "X"
+    idx_t = (load_json(DATA / "index.json", {}) or {}).get("tickers") or {}
+    if tk in idx_t:  # тикер из основного списка — обычное обновление
+        return job_refresh(tk)
+    old = load_json(DATA / f"{tk}.json")
+    try:
+        doc = fetch_doc(tk, sym, None, old)
+    except Exception as exc:  # noqa: BLE001
+        _extra_save(lambda ex: ex.setdefault("fail", {}).__setitem__(query.lower(), {"t": int(time.time()), "err": "мало истории котировок"}))
+        log(f"  {sym}: {exc}")
+        return
+    info_type = doc["quote"]["type"]
+    if info_type not in ("EQUITY", "ETF", "FUTURE"):
+        doc["mkt"] = "CR" if info_type == "CRYPTOCURRENCY" else "OT"
+    save_json(DATA / f"{tk}.json", doc)
+    q = doc["quote"]
+
+    def mut(ex):
+        prev = ex.get("tickers", {}).get(tk, {})
+        ex.setdefault("tickers", {})[tk] = {
+            "name": doc["name"], "mkt": doc["mkt"], "yahoo": sym, "cur": q["cur"], "last": q["price"],
+            "intervals": [k for k in ("1d", "1h", "5m") if k in doc], "news": len(doc["news"]), "q": query.lower(),
+            "added": prev.get("added") or int(time.time()), "updated": doc["updated"]}
+        ex.get("fail", {}).pop(query.lower(), None)
+    _extra_save(mut)
+    log(f"  ✓ {tk} ({doc['name']}) загружен")
+
+
+def job_analysts():
+    path = DATA / "analysts.json"
+    old = load_json(path, {}) or {}
+    old_t = old.get("tickers") or {}
+    names = list(old_t) or [k for k, v in ((load_json(DATA / "index.json", {}) or {}).get("tickers") or {}).items() if v.get("type") == "EQUITY"]
     cutoff = datetime.now(timezone.utc) - timedelta(days=30)
-    for sym in ANALYST_TICKERS:
-        item = {"symbol": sym, "actions": []}
+    log(f"Сбор действий аналитиков из Yahoo: {len(names)} акций…")
+    out = {}
+    total = 0
+    for tk in names:
+        prev = old_t.get(tk) or {}
+        acts = []
         try:
-            t = yf.Ticker(sym)
-            info = t.info or {}
-            item.update({
-                "name": info.get("shortName") or sym,
-                "price": _num(info.get("regularMarketPrice") or info.get("currentPrice")),
-                "recKey": info.get("recommendationKey"), "recMean": _num(info.get("recommendationMean")),
-                "count": _num(info.get("numberOfAnalystOpinions")),
-                "targetMean": _num(info.get("targetMeanPrice")), "targetMedian": _num(info.get("targetMedianPrice")),
-                "targetLow": _num(info.get("targetLowPrice")), "targetHigh": _num(info.get("targetHighPrice")),
-                "sector": info.get("sector"),
-            })
-            try:
-                ud = t.upgrades_downgrades
-                if ud is not None and len(ud):
-                    for idx, row in ud.iterrows():
-                        dt = idx.to_pydatetime() if hasattr(idx, "to_pydatetime") else idx
-                        if dt.tzinfo is None:
-                            dt = dt.replace(tzinfo=timezone.utc)
-                        if dt < cutoff:
-                            continue
-                        item["actions"].append({
-                            "time": int(dt.timestamp()), "firm": row.get("Firm"),
-                            "to": row.get("ToGrade"), "from": row.get("FromGrade"),
-                            "action": row.get("Action"),
-                            "ptAction": row.get("priceTargetAction"),
-                            "pt": _num(row.get("currentPriceTarget")), "ptPrior": _num(row.get("priorPriceTarget")),
-                        })
-            except Exception as exc:  # noqa: BLE001
-                job.error(f"{sym} upgrades: {exc}")
-            try:
-                rs = t.recommendations_summary if hasattr(t, "recommendations_summary") else None
-                if rs is not None and len(rs):
-                    r0 = rs.iloc[0]
-                    item["summary"] = {k: int(r0.get(k, 0) or 0) for k in ("strongBuy", "buy", "hold", "sell", "strongSell")}
-            except Exception:  # noqa: BLE001
-                pass
+            ud = yf().Ticker(YAHOO_MAP.get(tk, tk)).upgrades_downgrades
+            if ud is not None and len(ud):
+                for ix, r in ud.iterrows():
+                    dt = ix.to_pydatetime() if hasattr(ix, "to_pydatetime") else ix
+                    if dt.tzinfo is None:
+                        dt = dt.replace(tzinfo=timezone.utc)
+                    if dt < cutoff:
+                        continue
+                    action = str(r.get("Action") or "").lower()
+                    pt, ptp = num(r.get("currentPriceTarget")), num(r.get("priorPriceTarget"))
+                    pt = pt if pt and pt > 0 else None
+                    ptp = ptp if ptp and ptp > 0 else None
+                    kind = {"up": "up", "down": "down", "init": "init"}.get(action)
+                    if not kind:
+                        kind = "pt_up" if pt and ptp and pt > ptp else "pt_down" if pt and ptp and pt < ptp else "reit"
+                    a = {"t": dt.strftime("%Y-%m-%d"), "firm": str(r.get("Firm") or ""), "kind": kind}
+                    if r.get("ToGrade"):
+                        a["rating"] = str(r.get("ToGrade"))
+                    if r.get("FromGrade") and kind in ("up", "down"):
+                        a["ratingPrev"] = str(r.get("FromGrade"))
+                    if pt:
+                        a["pt"] = pt
+                    if ptp:
+                        a["ptPrev"] = ptp
+                    acts.append(a)
         except Exception as exc:  # noqa: BLE001
-            job.error(f"{sym}: {exc}")
-        out["items"].append(item)
-        job.step(sym)
-        time.sleep(0.3)
-    (DATA_DIR / "analysts.json").write_text(json.dumps(out, ensure_ascii=False, default=str), encoding="utf-8")
+            log(f"  {tk}: {exc}")
+        seen = {(a["t"], a["firm"].lower()) for a in acts}
+        cut = cutoff.strftime("%Y-%m-%d")
+        for a in prev.get("actions") or []:  # сохраняем найденное раньше (с пояснениями и ссылками), если оно не старше 30 дней
+            key = (a.get("t"), str(a.get("firm", "")).lower())
+            if a.get("t", "") >= cut and key not in seen:
+                acts.append(a)
+                seen.add(key)
+            elif key in seen:
+                for b in acts:
+                    if (b["t"], b["firm"].lower()) == key:
+                        for k in ("note", "src"):
+                            if a.get(k) and not b.get(k):
+                                b[k] = a[k]
+        acts.sort(key=lambda a: a.get("t", ""), reverse=True)
+        acts = acts[:12]
+        total += len(acts)
+        out[tk] = {"summary": prev.get("summary", ""), "actions": acts}
+        time.sleep(0.2)
+    save_json(path, {"v": 1, "updated": int(time.time()), "asOf": datetime.now().strftime("%Y-%m-%d"), "tickers": out})
+    log(f"Готово: {len(out)} акций, {total} действий аналитиков")
 
 
-# ---------------------------------------------------------------- Claude
+# ------------------------------------------------------------------ Claude (по желанию)
 def claude_available() -> bool:
     try:
         import anthropic  # noqa: F401,WPS433
@@ -407,209 +758,134 @@ def claude_available() -> bool:
     return bool(os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TOKEN"))
 
 
-def ask_claude(prompt: str, system: str | None = None, max_tokens: int = 8000, effort: str = "low") -> str:
+def job_forex():
     import anthropic  # noqa: WPS433
+    path = DATA / "forex_news.json"
+    cur = load_json(path, {}) or {}
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    log("Сбор новостей Форекс через Claude с веб-поиском (5–10 минут)…")
+    prompt = (
+        "Обнови ленту «Новости Форекс» для учебного терминала. Ниже текущий JSON — образец структуры и прошлые новости.\n"
+        "Через веб-поиск собери: а) главные новости Форекс за последние 72 часа (центробанки ФРС, ЕЦБ, Банк Англии, Банк Японии, "
+        "РБА, РБНЗ, Банк Канады, ШНБ; инфляция, занятость, ВВП, PMI, розничные продажи; геополитика, нефть, золото, индексы США, биткоин); "
+        "б) новости SolarEdge (SEDG), SpaceX (SPCX), Tower Semiconductor (TSEM) за 7 дней; в) экономический календарь с сегодняшнего дня "
+        f"({today}) на 7 дней: время, прогноз, предыдущее, у вышедших — факт; плюс события SEDG, SPCX, TSEM в эти дни.\n"
+        "Только факты из источников; не выдумывать цифры и время (неизвестное — пустая строка, неизвестное время — dateOnly: true).\n"
+        "Верни ТОЛЬКО JSON той же структуры: v=1, updated=Unix-время, asOf=сегодня, note — как есть, instruments — тот же список из 15 "
+        "в том же порядке с теми же name (level обновить, если есть свежий); news — 15–30 новостей за 7 дней (поля id, t ISO UTC, dateOnly, "
+        "cat, imp 1–3, title, why по-русски, effects {символ: −3…3} только для инструментов из списка, src [{name,url}] https); "
+        "calendar — события на 7 дней (t, dateOnly, cur, imp, event, fc, prev, act, scen [2 исхода], above, note, src).\n\n"
+        "Текущий JSON:\n" + json.dumps(cur, ensure_ascii=False))
     client = anthropic.Anthropic()
-    kwargs = dict(
-        model=CLAUDE_MODEL,
-        max_tokens=max_tokens,
-        betas=["server-side-fallback-2026-07-01"],
-        fallbacks="default",
-        output_config={"effort": effort},
-        messages=[{"role": "user", "content": prompt}],
-    )
-    if system:
-        kwargs["system"] = system
-    resp = client.beta.messages.create(**kwargs)
-    if resp.stop_reason == "refusal":
-        raise RuntimeError("Claude отклонил запрос")
-    return "".join(getattr(b, "text", "") for b in resp.content if getattr(b, "type", "") == "text").strip()
+    tools = [{"type": "web_search_20260209", "name": "web_search"}, {"type": "web_fetch_20260209", "name": "web_fetch"}]
+    messages = [{"role": "user", "content": prompt}]
+    resp = None
+    for _ in range(8):
+        with client.beta.messages.stream(model=CLAUDE_MODEL, max_tokens=64000, betas=["server-side-fallback-2026-07-01"],
+                                         fallbacks="default", output_config={"effort": "medium"},
+                                         tools=tools, messages=messages) as stream:
+            resp = stream.get_final_message()
+        if resp.stop_reason == "pause_turn":
+            messages.append({"role": "assistant", "content": resp.content})
+            continue
+        break
+    if resp is None or resp.stop_reason == "refusal":
+        raise RuntimeError("Claude не вернул результат")
+    text = "".join(getattr(b, "text", "") for b in resp.content if getattr(b, "type", "") == "text")
+    m = re.search(r"\{[\s\S]*\}", text)
+    data = json.loads(m.group(0)) if m else None
+    if not data or not isinstance(data.get("news"), list) or not data["news"]:
+        raise RuntimeError("Claude вернул неполный JSON")
+    syms = {i.get("sym") for i in (cur.get("instruments") or data.get("instruments") or [])}
+    for n in data["news"]:
+        n["effects"] = {k: max(-3, min(3, int(v))) for k, v in (n.get("effects") or {}).items() if k in syms}
+    for c in data.get("calendar") or []:
+        c["above"] = {k: max(-3, min(3, int(v))) for k, v in (c.get("above") or {}).items() if k in syms}
+    data["v"] = 1
+    data["updated"] = int(time.time())
+    data.setdefault("note", cur.get("note", ""))
+    data["instruments"] = data.get("instruments") or cur.get("instruments")
+    save_json(path, data)
+    log(f"Готово: новостей {len(data['news'])}, событий {len(data.get('calendar') or [])}")
 
 
-def extract_json(text: str):
-    m = re.search(r"```(?:json)?\s*(.*?)```", text, re.S)
-    if m:
-        text = m.group(1)
-    start = min([i for i in (text.find("{"), text.find("[")) if i >= 0] or [0])
-    return json.loads(text[start:])
+# ------------------------------------------------------------------ HTTP-сервер
+def page_html() -> bytes:
+    html = (APP_DIR / "index.html").read_text(encoding="utf-8")
+    inject = "<script>window.LOCAL_APP=true;</script>"
+    html = re.sub(r"<head>", "<head>" + inject, html, count=1, flags=re.I) if re.search(r"<head>", html, re.I) else inject + html
+    return html.encode("utf-8")
 
 
-# ---------------------------------------------------------------- Форекс
-POS_WORDS = ["beat", "beats", "surge", "soar", "rally", "jump", "gain", "rise", "record", "upgrade", "strong",
-             "bullish", "growth", "profit", "boost", "higher", "optimism", "approval", "wins", "tops", "raises"]
-NEG_WORDS = ["miss", "plunge", "fall", "drop", "slump", "tumble", "cut", "downgrade", "weak", "bearish", "loss",
-             "lawsuit", "probe", "fear", "lower", "recession", "crash", "warns", "sinks", "slides", "tariff", "risk"]
-
-
-def keyword_tone(title: str) -> int:
-    tl = title.lower()
-    s = sum(1 for w in POS_WORDS if re.search(r"\b" + w, tl)) - sum(1 for w in NEG_WORDS if re.search(r"\b" + w, tl))
-    return max(-3, min(3, s))
-
-
-def collect_forex(job: Job):
-    yf = _yf()
-    week_ago = time.time() - 7 * 86400
-    news, seen = [], set()
-    for name, ysym in FOREX_INSTRUMENTS.items():
-        try:
-            t = yf.Ticker(ysym)
-            raw = t.get_news(count=20) if hasattr(t, "get_news") else t.news
-            for n in parse_news(raw, name, None):
-                if (n["time"] or 0) < week_ago or n["title"] in seen:
-                    continue
-                seen.add(n["title"])
-                n["source_instrument"] = name
-                news.append(n)
-        except Exception as exc:  # noqa: BLE001
-            job.error(f"{name}: {exc}")
-        job.step(name)
-    news.sort(key=lambda x: x["time"] or 0, reverse=True)
-    news = news[:80]
-    instruments = list(FOREX_INSTRUMENTS)
-    used_claude = False
-    calendar = []
-    if claude_available() and news:
-        try:
-            lines = "\n".join(f"{i}. {n['title']}" for i, n in enumerate(news))
-            prompt = (
-                "Ты — трейдер с 30-летним стажем. Для каждого заголовка оцени влияние на инструменты "
-                f"{', '.join(instruments)} по шкале -3..+3 (0 — нет влияния; указывай только ненулевые), "
-                "важность 1-3 и краткое пояснение на русском (до 20 слов). Также составь экономический календарь США "
-                "и мира на ближайшие 7 дней (от " + datetime.now(timezone.utc).strftime("%Y-%m-%d") + ") со сценариями "
-                "«выше прогноза / ниже прогноза» для ключевых инструментов. Ответь ТОЛЬКО JSON вида "
-                '{"news":[{"i":0,"importance":2,"why":"...","impact":{"EURUSD":-1}}],'
-                '"calendar":[{"date":"YYYY-MM-DD","time":"HH:MM ET","event":"...","importance":3,'
-                '"above":"...","below":"..."}]}\n\nЗаголовки:\n' + lines)
-            data = extract_json(ask_claude(prompt, max_tokens=16000))
-            for row in data.get("news", []):
-                i = int(row.get("i", -1))
-                if 0 <= i < len(news):
-                    news[i]["impact"] = {k: int(v) for k, v in (row.get("impact") or {}).items() if k in instruments}
-                    news[i]["importance"] = row.get("importance", 1)
-                    news[i]["why"] = row.get("why", "")
-            calendar = data.get("calendar", [])
-            used_claude = True
-        except Exception as exc:  # noqa: BLE001
-            job.error(f"Claude: {exc}")
-    if not used_claude:
-        for n in news:
-            tone = keyword_tone(n["title"])
-            n["impact"] = {n["source_instrument"]: tone} if tone else {}
-            n["importance"] = 1 + min(2, abs(tone))
-            n["why"] = "оценка по ключевым словам (Claude недоступен)"
-    out = {"updated": int(time.time()), "news": news, "calendar": calendar, "instruments": instruments,
-           "claude": used_claude}
-    (DATA_DIR / "forex.json").write_text(json.dumps(out, ensure_ascii=False), encoding="utf-8")
-
-
-# ---------------------------------------------------------------- HTTP
 class Handler(SimpleHTTPRequestHandler):
-    def __init__(self, *a, **kw):
-        super().__init__(*a, directory=str(WEB_DIR), **kw)
+    def log_message(self, fmt, *args):
+        pass
 
-    def log_message(self, fmt, *args):  # тише
-        if "/api/" in (args[0] if args else ""):
-            return
-        super().log_message(fmt, *args)
-
-    def end_headers(self):
-        self.send_header("Cache-Control", "no-store")
-        super().end_headers()
-
-    def _json(self, obj, code=200):
-        body = json.dumps(obj, ensure_ascii=False, default=str).encode("utf-8")
+    def _send(self, code, body: bytes, ctype):
         self.send_response(code)
-        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
         self.end_headers()
         self.wfile.write(body)
 
-    def _body(self):
-        n = int(self.headers.get("Content-Length") or 0)
-        if not n:
-            return {}
-        try:
-            return json.loads(self.rfile.read(n).decode("utf-8"))
-        except Exception:  # noqa: BLE001
-            return {}
+    def _json(self, obj, code=200):
+        self._send(code, json.dumps(obj, ensure_ascii=False).encode("utf-8"), "application/json; charset=utf-8")
 
     def do_GET(self):  # noqa: N802
-        u = urlparse(self.path)
-        q = {k: v[0] for k, v in parse_qs(u.query).items()}
-        try:
-            if u.path == "/api/status":
-                cached = {p.stem: int(p.stat().st_mtime) for p in CACHE_DIR.glob("*.json")}
-                return self._json({"ok": True, "jobs": {k: j.snapshot() for k, j in JOBS.items()},
-                                   "cached": cached, "tickers": ALL_TICKERS, "extra": extra_tickers(),
-                                   "claude": claude_available(), "server_time": int(time.time())})
-            if u.path == "/api/data":
-                sym = (q.get("ticker") or "").upper()
-                data = load_cache(sym)
-                return self._json(data if data else {"error": "no-data", "symbol": sym})
-            if u.path == "/api/search":
-                return self._json(self.search(q.get("q", "")))
-            if u.path == "/api/analysts":
-                p = DATA_DIR / "analysts.json"
-                return self._json(json.loads(p.read_text(encoding="utf-8")) if p.exists() else {"items": []})
-            if u.path == "/api/forex":
-                p = DATA_DIR / "forex.json"
-                return self._json(json.loads(p.read_text(encoding="utf-8")) if p.exists() else {"news": []})
-        except Exception as exc:  # noqa: BLE001
-            traceback.print_exc()
-            return self._json({"error": str(exc)}, 500)
-        return super().do_GET()
+        path = unquote(urlparse(self.path).path)
+        if path in ("/", "/index.html"):
+            return self._send(200, page_html(), "text/html; charset=utf-8")
+        if path == "/api/status":
+            return self._json({"ok": True, "busy": {k: v for k, v in BUSY.items() if v}, "claude": claude_available(),
+                               "data": str(DATA)})
+        if path.startswith("/data/"):
+            name = path[len("/data/"):]
+            if not re.fullmatch(r"[A-Za-z0-9_.\-]+\.json", name):
+                return self._send(404, b"not found", "text/plain")
+            p = DATA / name
+            if not p.exists():
+                return self._send(404, b"not found", "text/plain")
+            return self._send(200, p.read_bytes(), "application/json; charset=utf-8")
+        if path.startswith("/tools/"):
+            p = APP_DIR / path.lstrip("/")
+            if p.is_file():
+                return self._send(200, p.read_bytes(), "text/plain; charset=utf-8")
+        return self._send(404, b"not found", "text/plain")
 
     def do_POST(self):  # noqa: N802
-        u = urlparse(self.path)
-        body = self._body()
+        path = urlparse(self.path).path
+        n = int(self.headers.get("Content-Length") or 0)
         try:
-            if u.path == "/api/refresh":
-                ok = JOBS["refresh"].start(len(ALL_TICKERS) + len(extra_tickers()), refresh_all)
-                return self._json({"started": ok, "job": JOBS["refresh"].snapshot()})
-            if u.path == "/api/analysts/collect":
-                ok = JOBS["analysts"].start(len(ANALYST_TICKERS), collect_analysts)
-                return self._json({"started": ok})
-            if u.path == "/api/forex/collect":
-                ok = JOBS["forex"].start(len(FOREX_INSTRUMENTS), collect_forex)
-                return self._json({"started": ok})
-            if u.path == "/api/load":
-                sym = (body.get("ticker") or "").upper().strip()
-                if not re.fullmatch(r"[A-Z0-9.^=\-]{1,15}", sym):
-                    return self._json({"error": "bad ticker"}, 400)
-                data = fetch_ticker(sym)
-                if not data["candles"].get("1d"):
-                    return self._json({"error": "Нет данных Yahoo по тикеру " + sym}, 404)
-                save_cache(sym, data)
-                add_extra_ticker(sym)
-                return self._json(data)
-            if u.path == "/api/claude":
-                if not claude_available():
-                    return self._json({"error": "Claude недоступен: установите anthropic и задайте ANTHROPIC_API_KEY"}, 503)
-                text = ask_claude(str(body.get("prompt", ""))[:60000], body.get("system"),
-                                  max_tokens=int(body.get("max_tokens", 4000)))
-                return self._json({"text": text})
-        except Exception as exc:  # noqa: BLE001
-            traceback.print_exc()
-            return self._json({"error": str(exc)}, 500)
-        return self._json({"error": "not found"}, 404)
-
-    @staticmethod
-    def search(query: str):
-        query = query.strip()
-        if not query:
-            return {"quotes": []}
-        yf = _yf()
-        try:
-            s = yf.Search(query, max_results=10, news_count=0)
-            quotes = [{"symbol": x.get("symbol"), "name": x.get("longname") or x.get("shortname") or "",
-                       "exchange": x.get("exchDisp") or x.get("exchange") or "", "type": x.get("quoteType", "")}
-                      for x in (s.quotes or []) if x.get("symbol")]
-            return {"quotes": quotes}
-        except Exception as exc:  # noqa: BLE001
-            return {"quotes": [{"symbol": query.upper(), "name": "", "exchange": "", "type": ""}], "warning": str(exc)}
+            body = json.loads(self.rfile.read(n).decode("utf-8")) if n else {}
+        except Exception:  # noqa: BLE001
+            body = {}
+        if path != "/api/trigger":
+            return self._json({"ok": False, "err": "not found"}, 404)
+        trig, text = body.get("trigger_id"), str(body.get("text") or "")
+        if trig == TRIG_REFRESH:
+            m = re.search(r"ТИКЕР:\s*([A-Za-z0-9]{1,14})", text)
+            which = m.group(1).upper() if m else "ALL"
+            run_job("refresh:" + which, job_refresh, which)
+            return self._json({"ok": True})
+        if trig == TRIG_ANY:
+            q = re.sub(r"^\s*ЗАПРОС:\s*", "", text)
+            run_job("any:" + q.lower(), job_any, q)
+            return self._json({"ok": True})
+        if trig == TRIG_ANALYSTS:
+            run_job("analysts", job_analysts)
+            return self._json({"ok": True})
+        if trig == TRIG_FOREX:
+            if not claude_available():
+                return self._json({"ok": False, "code": "local",
+                                   "err": "Сбор новостей Форекс в приложении работает через Claude: установите пакет anthropic "
+                                          "и задайте ANTHROPIC_API_KEY. Сейчас показаны последние сохранённые новости."})
+            run_job("forex", job_forex)
+            return self._json({"ok": True})
+        return self._json({"ok": False, "code": "local", "err": "Неизвестная задача"})
 
 
+# ------------------------------------------------------------------ запуск
 def lan_ip():
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
@@ -621,17 +897,31 @@ def lan_ip():
         s.close()
 
 
+def _already_running(port: int) -> bool:
+    import urllib.request  # noqa: WPS433
+    try:
+        with urllib.request.urlopen(f"http://127.0.0.1:{port}/api/status", timeout=2) as r:
+            return b'"ok"' in r.read(300)
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def main():
-    ap = argparse.ArgumentParser(description="Терминал анализа акций «Покупать / Продавать»")
+    ap = argparse.ArgumentParser(description="Терминал анализа акций — сигнал «Покупать / Продавать»")
     ap.add_argument("--port", type=int, default=8765)
-    ap.add_argument("--lan", action="store_true", help="слушать 0.0.0.0 (телефон в той же Wi-Fi сети)")
+    ap.add_argument("--lan", action="store_true", help="доступ с телефона в той же Wi-Fi сети")
     ap.add_argument("--window", action="store_true", help="открыть в отдельном окне (pywebview)")
     ap.add_argument("--no-browser", action="store_true")
+    ap.add_argument("--refresh", action="store_true", help="сразу обновить все котировки и выйти")
     args = ap.parse_args()
-    if not WEB_DIR.is_dir():
-        raise RuntimeError(f"Не найдена папка интерфейса web: {WEB_DIR}")
+    if not (APP_DIR / "index.html").is_file():
+        raise RuntimeError(f"Не найден терминал: {APP_DIR / 'index.html'}")
+    seed_data()
+    if args.refresh:
+        job_refresh("ALL")
+        return
     host = "0.0.0.0" if args.lan else "127.0.0.1"
-    srv, port = None, args.port
+    srv = None
     for port in range(args.port, args.port + 20):
         try:
             srv = ThreadingHTTPServer((host, port), Handler)
@@ -639,29 +929,32 @@ def main():
         except OSError:
             if port == args.port and _already_running(port):
                 url = f"http://127.0.0.1:{port}/"
-                print("Терминал уже запущен:", url, "— открываю его в браузере.")
+                print("Терминал уже запущен:", url, "— открываю его.")
                 if not args.no_browser:
                     webbrowser.open(url)
                 return
             print(f"Порт {port} занят, пробую следующий…")
     if srv is None:
-        raise RuntimeError(f"Все порты {args.port}–{args.port + 19} заняты. Запустите с --port 9000")
-    args.port = port
-    url = f"http://127.0.0.1:{args.port}/"
-    print("Терминал запущен:", url)
+        raise RuntimeError("Нет свободного порта. Запустите с --port 9000")
+    url = f"http://127.0.0.1:{port}/"
+    print("=" * 60)
+    print("Терминал анализа акций — сигнал «Покупать / Продавать»")
+    print("Открыт:", url)
     if args.lan:
-        print("С телефона (та же Wi-Fi сеть):", f"http://{lan_ip()}:{args.port}/")
-    print("Данные:", DATA_DIR)
-    print("Claude:", "доступен" if claude_available() else "недоступен (нет anthropic или ANTHROPIC_API_KEY)")
+        print("С телефона (та же Wi-Fi сеть):", f"http://{lan_ip()}:{port}/")
+    print("Данные:", DATA)
+    print("Claude (новости Форекс):", "подключён" if claude_available() else "не подключён (нужен ANTHROPIC_API_KEY)")
+    print("Не закрывайте это окно, пока работаете с терминалом.")
+    print("=" * 60, flush=True)
     if args.window:
         threading.Thread(target=srv.serve_forever, daemon=True).start()
         try:
             import webview  # noqa: WPS433
-            webview.create_window("Терминал «Покупать / Продавать»", url, width=1440, height=900)
+            webview.create_window("Терминал анализа акций", url, width=1440, height=900)
             webview.start()
             return
         except ImportError:
-            print("pywebview не установлен (pip install pywebview) — открываю браузер.")
+            print("pywebview не установлен — открываю браузер.")
             webbrowser.open(url)
             threading.Event().wait()
     else:
@@ -673,36 +966,23 @@ def main():
             print("\nОстановлено.")
 
 
-def _already_running(port: int) -> bool:
-    import urllib.request  # noqa: WPS433
-    try:
-        with urllib.request.urlopen(f"http://127.0.0.1:{port}/api/status", timeout=2) as r:
-            return b'"ok"' in r.read(200)
-    except Exception:  # noqa: BLE001
-        return False
-
-
 def run():
     try:
         main()
     except SystemExit:
         raise
-    except BaseException as exc:  # noqa: BLE001 — показать любую ошибку, а не закрыть окно
-        if isinstance(exc, KeyboardInterrupt):
-            return
+    except KeyboardInterrupt:
+        return
+    except BaseException:  # noqa: BLE001
         text = traceback.format_exc()
-        print("\n" + "=" * 60)
-        print("ОШИБКА ЗАПУСКА ТЕРМИНАЛА:")
-        print(text)
+        print("\n" + "=" * 60 + "\nОШИБКА ЗАПУСКА ТЕРМИНАЛА:\n" + text)
         try:
-            log = DATA_DIR / "error.log"
-            with open(log, "a", encoding="utf-8") as f:
+            with open(DATA_ROOT / "error.log", "a", encoding="utf-8") as f:
                 f.write(time.strftime("%Y-%m-%d %H:%M:%S ") + text + "\n")
-            print("Текст ошибки сохранён в файл:", log)
+            print("Текст ошибки сохранён в файл:", DATA_ROOT / "error.log")
         except OSError:
             pass
-        print("Пришлите этот текст или скриншот этого окна.")
-        print("=" * 60)
+        print("Пришлите этот текст или скриншот этого окна.\n" + "=" * 60)
         if FROZEN or os.name == "nt":
             try:
                 input("Нажмите Enter, чтобы закрыть окно…")

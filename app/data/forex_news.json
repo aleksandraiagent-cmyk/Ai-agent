@@ -1,0 +1,1067 @@
+{
+ "v": 1,
+ "updated": 1794293715,
+ "asOf": "2026-11-10",
+ "note": "Сводка собрана по открытым аналитическим обзорам (ссылки у каждой новости). Влияние: +1…+3 — давление в сторону роста инструмента (покупка), −1…−3 — в сторону снижения (продажа). Это оценка влияния новости, а не торговая рекомендация.",
+ "instruments": [
+  {
+   "sym": "EURUSD",
+   "name": "Евро / доллар",
+   "level": "1,1225 (9 нояб.)"
+  },
+  {
+   "sym": "GBPUSD",
+   "name": "Фунт / доллар",
+   "level": "1,3440 (9 нояб.)"
+  },
+  {
+   "sym": "USDJPY",
+   "name": "Доллар / иена",
+   "level": "157,92 (9 нояб.)"
+  },
+  {
+   "sym": "USDCHF",
+   "name": "Доллар / франк",
+   "level": "0,8195 (9 нояб.)"
+  },
+  {
+   "sym": "AUDUSD",
+   "name": "Австралийский доллар",
+   "level": "0,6930 (9 нояб.)"
+  },
+  {
+   "sym": "NZDUSD",
+   "name": "Новозеландский доллар",
+   "level": "0,5635 (9 нояб.)"
+  },
+  {
+   "sym": "USDCAD",
+   "name": "Доллар / канадский доллар",
+   "level": "1,4120 (9 нояб.)"
+  },
+  {
+   "sym": "XAUUSD",
+   "name": "Золото",
+   "level": "$4 140,96 (9 нояб.)"
+  },
+  {
+   "sym": "BRENT",
+   "name": "Нефть Brent",
+   "level": "$92,19 (9 нояб.)"
+  },
+  {
+   "sym": "US500",
+   "name": "S&P 500",
+   "level": "7 549,94 (закрытие 9 нояб.)"
+  },
+  {
+   "sym": "NAS100",
+   "name": "Nasdaq 100",
+   "level": "27 907,63 (закрытие 9 нояб.)"
+  },
+  {
+   "sym": "BTCUSD",
+   "name": "Биткоин",
+   "level": "$75 368 (9 нояб.)"
+  },
+  {
+   "sym": "SEDG",
+   "name": "SolarEdge",
+   "level": "$27,51 (закрытие 6 нояб.)"
+  },
+  {
+   "sym": "SPCX",
+   "name": "SpaceX",
+   "level": "$142,07 (закрытие 9 нояб.)"
+  },
+  {
+   "sym": "TSEM",
+   "name": "Tower Semiconductor",
+   "level": "$137,34 (закрытие 6 нояб.)"
+  }
+ ],
+ "news": [
+  {
+   "id": "brent-iran-2026-11-09",
+   "t": "2026-11-09T21:00:00Z",
+   "dateOnly": true,
+   "cat": "Нефть",
+   "imp": 3,
+   "title": "Brent упала на 5,9% до $92,19, WTI — до $86,37 на надеждах на сделку США и Ирана",
+   "why": "Сообщения о переговорах США и Ирана снизили страх перебоев в Ормузском проливе. Дешёвая нефть ослабляет инфляционные риски и поддерживает акции; риск — срыв переговоров.",
+   "effects": {
+    "BRENT": -3,
+    "USDCAD": 1,
+    "US500": 1,
+    "NAS100": 1
+   },
+   "src": [
+    {
+     "name": "TradingKey",
+     "url": "https://www.tradingkey.com/analysis/stocks/us-stocks/262297330-oil-drop-us-stocks-rally-dow-1100-nasdaq-amd-nvda-tradingkey"
+    },
+    {
+     "name": "TraderFactor",
+     "url": "https://traderfactor.com/us-cpi-in-focus-as-oil-crashes-gold-rallies/"
+    },
+    {
+     "name": "CoinDesk",
+     "url": "https://www.coindesk.com/tech/2026/11/09/live-news-nvidia-slides-on-ceo-allegations-as-bitcoin-hovers-just-above-its-200-day-average"
+    }
+   ]
+  },
+  {
+   "id": "stocks-rally-2026-11-09",
+   "t": "2026-11-09T21:00:00Z",
+   "cat": "Фондовый рынок",
+   "imp": 3,
+   "title": "Сильный отскок Уолл-стрит: S&P 500 +2,35% до 7 549,94, Nasdaq 100 +3,4%, Dow +1 100 пунктов",
+   "why": "Падение нефти и покупки после распродажи прошлой недели вернули спрос на риск; AMD +13%, индекс полупроводников SOX вернулся выше 10 000. Акции роста и полупроводники отыгрывают потери.",
+   "effects": {
+    "US500": 2,
+    "NAS100": 2,
+    "TSEM": 1,
+    "SPCX": 1,
+    "SEDG": 1,
+    "AUDUSD": 1
+   },
+   "src": [
+    {
+     "name": "TradingKey",
+     "url": "https://www.tradingkey.com/analysis/stocks/us-stocks/262297330-oil-drop-us-stocks-rally-dow-1100-nasdaq-amd-nvda-tradingkey"
+    },
+    {
+     "name": "TraderFactor",
+     "url": "https://traderfactor.com/us-cpi-in-focus-as-oil-crashes-gold-rallies/"
+    }
+   ]
+  },
+  {
+   "id": "gold-2026-11-09",
+   "t": "2026-11-09T21:00:00Z",
+   "dateOnly": true,
+   "cat": "Золото",
+   "imp": 2,
+   "title": "Золото выросло на 1,7–1,8% до $4 141–4 150",
+   "why": "Ослабление доллара (DXY −0,6%) поддержало металл, несмотря на ожидания повышения ставки ФРС в декабре.",
+   "effects": {
+    "XAUUSD": 2
+   },
+   "src": [
+    {
+     "name": "TradingKey",
+     "url": "https://www.tradingkey.com/analysis/stocks/us-stocks/262297330-oil-drop-us-stocks-rally-dow-1100-nasdaq-amd-nvda-tradingkey"
+    },
+    {
+     "name": "TraderFactor",
+     "url": "https://traderfactor.com/us-cpi-in-focus-as-oil-crashes-gold-rallies/"
+    },
+    {
+     "name": "CoinDesk",
+     "url": "https://www.coindesk.com/tech/2026/11/09/live-news-nvidia-slides-on-ceo-allegations-as-bitcoin-hovers-just-above-its-200-day-average"
+    }
+   ]
+  },
+  {
+   "id": "dxy-2026-11-09",
+   "t": "2026-11-09T21:00:00Z",
+   "dateOnly": true,
+   "cat": "Доллар",
+   "imp": 2,
+   "title": "Доллар откатился от максимумов: индекс DXY −0,6% до 101,69, EUR/USD 1,1225",
+   "why": "После недельного ралли доллар скорректировался вместе с падением нефти и ростом аппетита к риску в преддверии данных по инфляции.",
+   "effects": {
+    "EURUSD": 1,
+    "GBPUSD": 1,
+    "USDJPY": -1,
+    "USDCHF": -1,
+    "AUDUSD": 1,
+    "NZDUSD": 1,
+    "USDCAD": -1
+   },
+   "src": [
+    {
+     "name": "TraderFactor",
+     "url": "https://traderfactor.com/us-cpi-in-focus-as-oil-crashes-gold-rallies/"
+    },
+    {
+     "name": "InstaForex",
+     "url": "https://www.instaforex.com/forex-news/3284752"
+    }
+   ]
+  },
+  {
+   "id": "nvda-probe-2026-11-09",
+   "t": "2026-11-09T21:00:00Z",
+   "dateOnly": true,
+   "cat": "Фондовый рынок",
+   "imp": 2,
+   "title": "Nvidia −4,3% до $178,67: совет директоров начал независимое расследование в отношении CEO Дженсена Хуанга",
+   "why": "Риск для крупнейшей бумаги Nasdaq и для настроений в секторе ИИ-чипов; компания заявляет, что не видит утечки секретов.",
+   "effects": {
+    "NAS100": -1,
+    "TSEM": -1
+   },
+   "src": [
+    {
+     "name": "CoinDesk",
+     "url": "https://www.coindesk.com/tech/2026/11/09/live-news-nvidia-slides-on-ceo-allegations-as-bitcoin-hovers-just-above-its-200-day-average"
+    },
+    {
+     "name": "TradingKey",
+     "url": "https://www.tradingkey.com/analysis/stocks/us-stocks/262297330-oil-drop-us-stocks-rally-dow-1100-nasdaq-amd-nvda-tradingkey"
+    }
+   ]
+  },
+  {
+   "id": "btc-2026-11-09",
+   "t": "2026-11-09T21:00:00Z",
+   "dateOnly": true,
+   "cat": "Криптовалюты",
+   "imp": 2,
+   "title": "Биткоин отстаёт от акций: около $74 800–75 400, у 200-дневной средней ($73 151)",
+   "why": "Крипта не участвовала в ралли акций; MARA продала 13 597 BTC. Пробой 200-дневной средней усилит продажи.",
+   "effects": {
+    "BTCUSD": -1
+   },
+   "src": [
+    {
+     "name": "CoinDesk",
+     "url": "https://www.coindesk.com/tech/2026/11/09/live-news-nvidia-slides-on-ceo-allegations-as-bitcoin-hovers-just-above-its-200-day-average"
+    },
+    {
+     "name": "TradingKey",
+     "url": "https://www.tradingkey.com/analysis/stocks/us-stocks/262297330-oil-drop-us-stocks-rally-dow-1100-nasdaq-amd-nvda-tradingkey"
+    }
+   ]
+  },
+  {
+   "id": "spcx-nasa-2026-11-09",
+   "t": "2026-11-09T21:00:00Z",
+   "cat": "Акции: SpaceX",
+   "imp": 3,
+   "title": "SpaceX +5,8% до $142,07 — выше цены IPO $135 — после контрактов NASA на лунную базу",
+   "why": "7 ноября NASA выбрала восемь компаний, включая SpaceX, для доставки грузов на Луну с общим лимитом $10 млрд на 10 лет. Капитализация выросла более чем на $100 млрд за день.",
+   "effects": {
+    "SPCX": 2
+   },
+   "src": [
+    {
+     "name": "Gotrade",
+     "url": "https://www.heygotrade.com/en/news/spacex-spcx-stock-news-november-10-2026/"
+    },
+    {
+     "name": "Yahoo Finance",
+     "url": "https://finance.yahoo.com/markets/article/spacex-rocket-lab-blast-higher-as-nasa-hands-out-10-billion-in-moon-base-awards-164320855.html"
+    }
+   ]
+  },
+  {
+   "id": "fed-speak-2026-11-09",
+   "t": "2026-11-09T17:17:00Z",
+   "cat": "Центробанки",
+   "imp": 2,
+   "title": "ФРС: Гулсби — «надо признать провал с инфляцией», Баркин — действовать осторожно; шансы на повышение ставки в декабре 84–85%",
+   "why": "Жёсткая риторика закрепляет ожидания повышения ставки 8–9 декабря — это поддержка доллару и давление на акции роста и золото.",
+   "effects": {
+    "EURUSD": -1,
+    "USDJPY": 1,
+    "XAUUSD": -1,
+    "NAS100": -1,
+    "BTCUSD": -1
+   },
+   "src": [
+    {
+     "name": "CoinDesk",
+     "url": "https://www.coindesk.com/tech/2026/11/09/live-news-nvidia-slides-on-ceo-allegations-as-bitcoin-hovers-just-above-its-200-day-average"
+    },
+    {
+     "name": "InstaForex",
+     "url": "https://www.instaforex.com/forex-news/3284752"
+    }
+   ]
+  },
+  {
+   "id": "spcx-starbase-2026-11-09",
+   "t": "2026-11-09T12:00:00Z",
+   "dateOnly": true,
+   "cat": "Акции: SpaceX",
+   "imp": 1,
+   "title": "SpaceX предложила газовую электростанцию и вычислительный центр в Старбейсе на ≈$24 млрд",
+   "why": "Крупные капзатраты на ИИ-инфраструктуру; слушания по налоговым льготам назначены на 9 декабря. Рынок следит за финансированием.",
+   "effects": {
+    "SPCX": 1
+   },
+   "src": [
+    {
+     "name": "Gotrade",
+     "url": "https://www.heygotrade.com/en/news/spacex-spcx-stock-news-november-10-2026/"
+    }
+   ]
+  },
+  {
+   "id": "spcx-ai-financing",
+   "t": "2026-11-08T14:55:00Z",
+   "cat": "Акции: SpaceX",
+   "imp": 1,
+   "title": "Акции ИИ-энергетики упали на 6–9% на опасениях о финансировании; Goldman продаёт долг SpaceX на $40 млрд под лизинг GPU",
+   "why": "Рынок нервничает из-за долгового финансирования вычислительных мощностей; SpaceX утверждает, что новые мощности окупаются меньше чем за год. Мнения аналитиков полярны: Morgan Stanley — цель $300, Майкл Бьюрри считает акции переоценёнными.",
+   "effects": {
+    "SPCX": -1
+   },
+   "src": [
+    {
+     "name": "Motley Fool / Yahoo",
+     "url": "https://finance.yahoo.com/markets/stocks/articles/ai-power-stocks-just-fell-145500327.html"
+    },
+    {
+     "name": "TIKR / Yahoo",
+     "url": "https://finance.yahoo.com/markets/stocks/articles/musk-never-lend-money-pure-021812060.html"
+    },
+    {
+     "name": "Motley Fool / Yahoo",
+     "url": "https://finance.yahoo.com/markets/stocks/articles/morgan-stanley-says-300-michael-135000057.html"
+    }
+   ]
+  },
+  {
+   "id": "spcx-lockup",
+   "t": "2026-11-07T21:05:00Z",
+   "cat": "Акции: SpaceX",
+   "imp": 2,
+   "title": "В декабре истекает запрет на продажу акций SpaceX для ранних акционеров — почти крупнейший в истории IPO",
+   "why": "Большой объём акций, который смогут продать инсайдеры и ранние инвесторы, может давить на цену в преддверии и после даты разблокировки.",
+   "effects": {
+    "SPCX": -1
+   },
+   "src": [
+    {
+     "name": "Motley Fool / Yahoo",
+     "url": "https://finance.yahoo.com/markets/stocks/articles/spacexs-december-lockup-nearly-biggest-210500586.html"
+    }
+   ]
+  },
+  {
+   "id": "dxy-weekly-high",
+   "t": "2026-11-06T22:00:00Z",
+   "cat": "Доллар",
+   "imp": 2,
+   "title": "Индекс доллара DXY закрыл неделю на максимуме с марта 2025 года",
+   "why": "Рынок закладывает повышение ставки ФРС; аналитики DailyForex сохраняют взгляд «покупать доллар» на неделю 9–13 ноября, поддержка DXY — 101,39.",
+   "effects": {
+    "EURUSD": -1,
+    "GBPUSD": -1,
+    "USDJPY": 1,
+    "AUDUSD": -1,
+    "NZDUSD": -1,
+    "XAUUSD": -1
+   },
+   "src": [
+    {
+     "name": "DailyForex",
+     "url": "https://www.dailyforex.com/forex-technical-analysis/2026/11/weekly-pairs-in-focus-9th-to-13th-november-2026/251549"
+    }
+   ],
+   "when": "итоги недели 2–6 нояб."
+  },
+  {
+   "id": "gold-week",
+   "t": "2026-11-06T21:30:00Z",
+   "cat": "Золото",
+   "imp": 2,
+   "title": "Золото: +5% за неделю до $4 079,5 после годового минимума, в пятницу откат от $4 148",
+   "why": "Падение доходностей и ослабление доллара после выборов поддержали золото; сильные данные по занятости его притормозили. Пока цена выше $4 000, тренд остаётся конструктивным; горячий CPI во вторник может пробить этот уровень.",
+   "effects": {
+    "XAUUSD": 1
+   },
+   "src": [
+    {
+     "name": "NordFX",
+     "url": "https://nordfx.com/market-news/forex-cryptocurrency-forecast-november-09-13-2026"
+    }
+   ],
+   "when": "итоги недели 2–6 нояб."
+  },
+  {
+   "id": "btc-week",
+   "t": "2026-11-06T21:00:00Z",
+   "cat": "Криптовалюты",
+   "imp": 1,
+   "title": "Биткоин: −1,6% за неделю до $76 038, тестировал $75 000",
+   "why": "Распродажа акций ИИ и рост ожиданий повышения ставки ФРС снизили аппетит к риску. Закрытие дня ниже $75 000 открывает путь к $72 000.",
+   "effects": {
+    "BTCUSD": -1
+   },
+   "src": [
+    {
+     "name": "NordFX",
+     "url": "https://nordfx.com/market-news/forex-cryptocurrency-forecast-november-09-13-2026"
+    }
+   ],
+   "when": "итоги недели 2–6 нояб."
+  },
+  {
+   "id": "oil-week",
+   "t": "2026-11-06T21:00:00Z",
+   "cat": "Нефть",
+   "imp": 3,
+   "title": "Нефть Brent: −13,6% за неделю до $97,75; в среду обвал на 9,2% до $94,11, затем отскок после атаки на судно у Ормузского пролива",
+   "why": "Победа демократов и позитивные слова вице-президента Вэнса о переговорах с Ираном снизили шансы крупного удара США — премия за риск уходит. Инцидент у Ормуза ограничил падение. Дешёвая нефть давит и на канадский доллар.",
+   "effects": {
+    "BRENT": -2,
+    "USDCAD": 1
+   },
+   "src": [
+    {
+     "name": "NordFX",
+     "url": "https://nordfx.com/market-news/forex-cryptocurrency-forecast-november-09-13-2026"
+    },
+    {
+     "name": "DailyForex",
+     "url": "https://www.dailyforex.com/forex-technical-analysis/2026/11/weekly-pairs-in-focus-9th-to-13th-november-2026/251549"
+    }
+   ],
+   "when": "итоги недели 2–6 нояб."
+  },
+  {
+   "id": "spcx-rebound",
+   "t": "2026-11-06T21:00:00Z",
+   "cat": "Акции: SpaceX",
+   "imp": 2,
+   "title": "SpaceX отскочила на 8,6% до $134,27 — но всё ещё ниже цены IPO $135",
+   "why": "Частичный возврат после падения на 12,5% за два дня после выборов; явного нового повода в источнике не названо.",
+   "effects": {
+    "SPCX": 1
+   },
+   "src": [
+    {
+     "name": "Motley Fool",
+     "url": "https://www.fool.com/investing/2026/11/06/why-spacex-stock-popped-on-friday/"
+    }
+   ]
+  },
+  {
+   "id": "sedg-pt-cuts",
+   "t": "2026-11-06T14:14:00Z",
+   "cat": "Акции: SolarEdge",
+   "imp": 2,
+   "title": "Аналитики снижают цели по SolarEdge: Deutsche Bank — до $26 с $34 (держать), RBC — до $25 с $30",
+   "why": "После отчёта банки урезали оценки из-за слабого прогноза. По подсчёту MarketBeat, консенсус — «сокращать» (2 «покупать», 11 «держать», 5 «продавать»).",
+   "effects": {
+    "SEDG": -1
+   },
+   "src": [
+    {
+     "name": "MT Newswires / Yahoo",
+     "url": "https://finance.yahoo.com/markets/stocks/articles/rbc-cuts-price-target-solaredge-141449246.html"
+    },
+    {
+     "name": "MT Newswires / Yahoo",
+     "url": "https://finance.yahoo.com/markets/stocks/articles/deutsche-bank-adjusts-solaredge-technologies-130636887.html"
+    },
+    {
+     "name": "MarketBeat",
+     "url": "https://www.marketbeat.com/instant-alerts/earnings-solaredge-technologies-nasdaq-sedg-posts-earnings-results-beats-estimates-by-025-eps-2026-11-04/"
+    }
+   ]
+  },
+  {
+   "id": "nfp-2026-11",
+   "t": "2026-11-06T13:30:00Z",
+   "cat": "Данные США",
+   "imp": 3,
+   "title": "США: занятость вне сельского хозяйства +165 тыс. при прогнозе около 60 тыс., безработица снизилась до 4,1%",
+   "why": "Сильный рынок труда поднял вероятность повышения ставки ФРС в декабре примерно до 78–80%. Доходности и доллар выросли, золото откатилось от $4 148, рисковые активы под давлением.",
+   "effects": {
+    "EURUSD": -2,
+    "GBPUSD": -2,
+    "USDJPY": 2,
+    "USDCHF": 1,
+    "AUDUSD": -1,
+    "NZDUSD": -1,
+    "USDCAD": 1,
+    "XAUUSD": -1,
+    "US500": -1,
+    "NAS100": -1,
+    "BTCUSD": -1
+   },
+   "src": [
+    {
+     "name": "NordFX",
+     "url": "https://nordfx.com/market-news/forex-cryptocurrency-forecast-november-09-13-2026"
+    },
+    {
+     "name": "DailyForex",
+     "url": "https://www.dailyforex.com/forex-technical-analysis/2026/11/weekly-pairs-in-focus-9th-to-13th-november-2026/251549"
+    }
+   ]
+  },
+  {
+   "id": "nasdaq-selloff",
+   "t": "2026-11-05T21:00:00Z",
+   "cat": "Фондовый рынок",
+   "imp": 3,
+   "title": "Nasdaq 100 упал на 6,4% за день; за неделю −4,9%, S&P 500 −2,7% до ≈7 378 — у 200-дневной средней",
+   "why": "Инвесторы опасаются ограничений на строительство дата-центров ИИ после победы демократов; давят высокие ставки и сомнения в прибыльности ИИ. Бегство от риска бьёт по биткоину и австралийскому доллару.",
+   "effects": {
+    "NAS100": -2,
+    "US500": -2,
+    "BTCUSD": -1,
+    "AUDUSD": -1,
+    "TSEM": -1,
+    "SPCX": -1
+   },
+   "src": [
+    {
+     "name": "DailyForex",
+     "url": "https://www.dailyforex.com/forex-technical-analysis/2026/11/weekly-pairs-in-focus-9th-to-13th-november-2026/251549"
+    }
+   ],
+   "when": "5 нояб. и итоги недели"
+  },
+  {
+   "id": "spcx-midterms",
+   "t": "2026-11-05T15:00:00Z",
+   "dateOnly": true,
+   "cat": "Акции: SpaceX",
+   "imp": 3,
+   "title": "SpaceX упала примерно на 9–11% после победы демократов на выборах",
+   "why": "Рынок опасается проверок госконтрактов Маска и пауз в одобрении дата-центров в Техасе: ИИ-подразделение дало $7,56 млрд из $14,6 млрд выручки III квартала и сильно вкладывается в инфраструктуру. Противовес — Starlink: $5,25 млрд выручки (+69% г/г).",
+   "effects": {
+    "SPCX": -2
+   },
+   "src": [
+    {
+     "name": "TipRanks",
+     "url": "https://www.tipranks.com/news/article/spacex-stock-spcx-is-plunging-why-investors-are-scared-today-november-5-2026"
+    },
+    {
+     "name": "Gotrade",
+     "url": "https://www.heygotrade.com/en/news/spacex-spcx-stock-news-november-6-2026/"
+    }
+   ]
+  },
+  {
+   "id": "boe-hike",
+   "t": "2026-11-05T12:00:00Z",
+   "dateOnly": true,
+   "cat": "Центробанки",
+   "imp": 3,
+   "title": "Банк Англии повысил ставку на 0,25 п.п. до 4,00% (8 голосов против 1; один голос — за 4,25%)",
+   "why": "«Ястребиное» повышение: банк ждёт инфляцию около 5% к середине 2027 года. Поддерживает фунт; риск — слабый рост экономики.",
+   "effects": {
+    "GBPUSD": 2
+   },
+   "src": [
+    {
+     "name": "Skyrexx",
+     "url": "https://skyrexx.com/2026/11/07/forex-forecast-november-9-13-2026-dollar-euro-pound-and-yen-in-focus/"
+    },
+    {
+     "name": "DailyForex",
+     "url": "https://www.dailyforex.com/forex-technical-analysis/2026/11/weekly-pairs-in-focus-9th-to-13th-november-2026/251549"
+    }
+   ]
+  },
+  {
+   "id": "sedg-guide-2026-11-04",
+   "t": "2026-11-04T21:00:00Z",
+   "dateOnly": true,
+   "cat": "Акции: SolarEdge",
+   "imp": 2,
+   "title": "SolarEdge −8,7%: прибыль III кв. держалась на возврате пошлин $36 млн, прогноз на IV кв. снижен до $245–275 млн",
+   "why": "Без разового возврата пошлин валовая маржа ≈23,6%; в I кв. 2027 ждут спада выручки ещё на 10%+, 2027 год — плоская выручка. Это ослабляет историю разворота.",
+   "effects": {
+    "SEDG": -2
+   },
+   "src": [
+    {
+     "name": "Finviz / Earnings Whispers",
+     "url": "https://finviz.com/news/415570/solaredges-3000-beat-rests-on-tariff-refunds-as-guidance-cut-and-flat-2027-outlook-stall-the-turnaround"
+    }
+   ]
+  },
+  {
+   "id": "sedg-q3",
+   "t": "2026-11-04T12:00:00Z",
+   "dateOnly": true,
+   "cat": "Акции: SolarEdge",
+   "imp": 3,
+   "title": "SolarEdge за III квартал: прибыль $0,29 на акцию при прогнозе $0,04, выручка $325,4 млн (−4,2% г/г); прогноз на IV квартал — $245–275 млн",
+   "why": "Прибыль превысила ожидания во многом за счёт разовой выгоды $36 млн (возврат пошлин IEEPA), а прогноз слабый: в I квартале 2027 компания ждёт падения выручки ещё более чем на 10%. В день отчёта акции снижались до ~$30.",
+   "effects": {
+    "SEDG": -2
+   },
+   "src": [
+    {
+     "name": "MarketBeat",
+     "url": "https://www.marketbeat.com/instant-alerts/earnings-solaredge-technologies-nasdaq-sedg-posts-earnings-results-beats-estimates-by-025-eps-2026-11-04/"
+    }
+   ]
+  },
+  {
+   "id": "us-midterms",
+   "t": "2026-11-04T06:00:00Z",
+   "dateOnly": true,
+   "cat": "Политика США",
+   "imp": 3,
+   "title": "Промежуточные выборы в США: демократы получили обе палаты Конгресса",
+   "why": "Сразу после выборов доллар и доходности снизились (поддержка золота), нефть подешевела на снижении риска удара по Ирану, технологический сектор попал под давление из-за возможных ограничений для ИИ.",
+   "effects": {
+    "NAS100": -1,
+    "BRENT": -1,
+    "XAUUSD": 1
+   },
+   "src": [
+    {
+     "name": "NordFX",
+     "url": "https://nordfx.com/market-news/forex-cryptocurrency-forecast-november-09-13-2026"
+    },
+    {
+     "name": "DailyForex",
+     "url": "https://www.dailyforex.com/forex-technical-analysis/2026/11/weekly-pairs-in-focus-9th-to-13th-november-2026/251549"
+    }
+   ]
+  },
+  {
+   "id": "nz-unemployment",
+   "t": "2026-11-04T00:00:00Z",
+   "when": "неделя 2–6 нояб.",
+   "cat": "Данные Новой Зеландии",
+   "imp": 2,
+   "title": "Безработица в Новой Зеландии выросла до 5,7% — максимум за 11 лет (ожидали снижения)",
+   "why": "Слабый рынок труда повышает шансы мягкой политики РБНЗ — давление на новозеландский доллар.",
+   "effects": {
+    "NZDUSD": -2
+   },
+   "src": [
+    {
+     "name": "DailyForex",
+     "url": "https://www.dailyforex.com/forex-technical-analysis/2026/11/weekly-pairs-in-focus-9th-to-13th-november-2026/251549"
+    }
+   ]
+  },
+  {
+   "id": "tsem-innolight",
+   "t": "2026-11-03T18:13:00Z",
+   "cat": "Акции: Tower Semiconductor",
+   "imp": 1,
+   "title": "Tower Semiconductor и Innolight развивают оптику рядом с корпусом чипа (near-package optics) для инфраструктуры ИИ",
+   "why": "Укрепляет позиции Tower в кремниевой фотонике — главном драйвере роста компании.",
+   "effects": {
+    "TSEM": 1
+   },
+   "src": [
+    {
+     "name": "GlobeNewswire / Yahoo",
+     "url": "https://finance.yahoo.com/technology/ai/articles/tower-semiconductor-innolight-advance-high-181300246.html"
+    }
+   ]
+  },
+  {
+   "id": "tsem-wedbush",
+   "t": "2026-11-03T13:43:00Z",
+   "cat": "Акции: Tower Semiconductor",
+   "imp": 2,
+   "title": "Wedbush снизил цель по Tower Semiconductor до $190 с $300 (нейтрально); за неделю акции потеряли 14%, несмотря на рекордный отчёт",
+   "why": "Давит общая распродажа полупроводников и акций ИИ, а не сам бизнес: компания называет нынешний период «самой сильной фазой роста в истории».",
+   "effects": {
+    "TSEM": -1
+   },
+   "src": [
+    {
+     "name": "MT Newswires / Yahoo",
+     "url": "https://finance.yahoo.com/markets/stocks/articles/wedbush-cuts-price-target-tower-134320965.html"
+    },
+    {
+     "name": "TIKR / Yahoo",
+     "url": "https://finance.yahoo.com/markets/stocks/articles/tower-semiconductor-sinks-14-week-204220913.html"
+    }
+   ]
+  },
+  {
+   "id": "tsem-intel-selloff",
+   "t": "2026-11-03T12:00:00Z",
+   "dateOnly": true,
+   "cat": "Акции: Tower Semiconductor",
+   "imp": 2,
+   "title": "Tower Semiconductor потеряла 14% за неделю, несмотря на рекордный отчёт: давит слабый прогноз Intel",
+   "why": "Прогноз Intel на IV квартал ниже ожиданий обрушил оптические и полупроводниковые акции (Lumentum −22%, Coherent −12%). Форвардный P/E Tower снизился до 26 — около среднего за 5 лет против 84 в июне.",
+   "effects": {
+    "TSEM": -1,
+    "NAS100": -1
+   },
+   "src": [
+    {
+     "name": "TIKR",
+     "url": "https://www.tikr.com/blog/tower-semiconductor-sinks-14-in-a-week-despite-the-strongest-growth-phase-in-our-history"
+    }
+   ]
+  }
+ ],
+ "calendar": [
+  {
+   "t": "2026-11-10T00:00:00Z",
+   "dateOnly": true,
+   "cur": "CNY",
+   "imp": 2,
+   "event": "Китай: торговый баланс, октябрь",
+   "fc": "135,0 млрд $",
+   "prev": "133,53 млрд $",
+   "scen": [
+    "выше прогноза",
+    "ниже прогноза"
+   ],
+   "above": {
+    "AUDUSD": 1,
+    "NZDUSD": 1
+   },
+   "note": "Сильный экспорт Китая поддерживает сырьевые валюты.",
+   "src": "https://roboforex.com/blog/analysis/next-cpi-report-market-week-ahead-november-9-13/"
+  },
+  {
+   "t": "2026-11-10T09:00:00Z",
+   "cur": "USD",
+   "imp": 2,
+   "event": "США: выступление члена ФРС Кристофера Уоллера",
+   "fc": "",
+   "prev": "",
+   "scen": [
+    "жёсткий тон",
+    "мягкий тон"
+   ],
+   "above": {
+    "EURUSD": -1,
+    "USDJPY": 1,
+    "XAUUSD": -1,
+    "NAS100": -1
+   },
+   "note": "Накануне CPI рынок ищет подтверждение ставок на повышение ставки ФРС в декабре.",
+   "src": "https://www.fxempire.com/forecasts/article/the-week-ahead-cpi-and-tech-earnings-test-a-fragile-stock-market-1643118"
+  },
+  {
+   "t": "2026-11-10T11:00:00Z",
+   "dateOnly": false,
+   "cur": "USD",
+   "imp": 1,
+   "event": "США: индекс оптимизма малого бизнеса NFIB, октябрь",
+   "fc": "≈98",
+   "prev": "",
+   "scen": [
+    "выше прогноза",
+    "ниже прогноза"
+   ],
+   "above": {
+    "US500": 1
+   },
+   "note": "Второстепенный индикатор настроений бизнеса перед CPI.",
+   "src": "https://traderfactor.com/us-cpi-in-focus-as-oil-crashes-gold-rallies/"
+  },
+  {
+   "t": "2026-11-10T13:30:00Z",
+   "cur": "USD",
+   "imp": 3,
+   "event": "США: индекс потребительских цен (CPI), октябрь",
+   "fc": "0,3% м/м; базовый 0,2% м/м (г/г ≈3,9%, базовый ≈2,8%)",
+   "prev": "0,6% м/м; базовый 0,3% м/м; 3,7% г/г",
+   "scen": [
+    "выше прогноза",
+    "ниже прогноза"
+   ],
+   "above": {
+    "EURUSD": -2,
+    "GBPUSD": -2,
+    "USDJPY": 2,
+    "USDCHF": 1,
+    "AUDUSD": -1,
+    "NZDUSD": -1,
+    "USDCAD": 1,
+    "XAUUSD": -2,
+    "US500": -2,
+    "NAS100": -2,
+    "BTCUSD": -2,
+    "SPCX": -1,
+    "TSEM": -1,
+    "SEDG": -1
+   },
+   "note": "Главное событие недели. Горячая инфляция закрепит ожидания повышения ставки ФРС в декабре; мягкая — ослабит доллар и поддержит золото и акции.",
+   "src": "https://www.coindesk.com/tech/2026/11/09/live-news-nvidia-slides-on-ceo-allegations-as-bitcoin-hovers-just-above-its-200-day-average"
+  },
+  {
+   "t": "2026-11-10T18:00:00Z",
+   "dateOnly": false,
+   "cur": "USD",
+   "imp": 2,
+   "event": "США: аукцион 10-летних казначейских облигаций",
+   "fc": "",
+   "prev": "",
+   "scen": [
+    "высокая доходность",
+    "низкая доходность"
+   ],
+   "above": {
+    "USDJPY": 1,
+    "EURUSD": -1,
+    "XAUUSD": -1,
+    "NAS100": -1
+   },
+   "note": "Слабый спрос и рост доходности поддержат доллар и надавят на акции роста.",
+   "src": "https://traderfactor.com/us-cpi-in-focus-as-oil-crashes-gold-rallies/"
+  },
+  {
+   "t": "2026-11-10T21:00:00Z",
+   "dateOnly": true,
+   "cur": "USD",
+   "imp": 2,
+   "event": "CoreWeave: отчёт за III квартал (после закрытия)",
+   "fc": "EPS −1,55 $; выручка 3,5 млрд $",
+   "prev": "выручка 1,4 млрд $ год назад",
+   "scen": [
+    "выше прогноза",
+    "ниже прогноза"
+   ],
+   "above": {
+    "NAS100": 1,
+    "SPCX": 1,
+    "TSEM": 1
+   },
+   "note": "Проверка опасений о финансировании ИИ-инфраструктуры после распродажи прошлой недели.",
+   "src": "https://www.fxempire.com/forecasts/article/the-week-ahead-cpi-and-tech-earnings-test-a-fragile-stock-market-1643118"
+  },
+  {
+   "t": "2026-11-11T07:00:00Z",
+   "cur": "EUR",
+   "imp": 1,
+   "event": "Германия: инфляция (окончательные данные), октябрь",
+   "fc": "",
+   "prev": "предварительно 2,8%",
+   "scen": [
+    "выше прогноза",
+    "ниже прогноза"
+   ],
+   "above": {
+    "EURUSD": 1
+   },
+   "note": "В США в этот день выходной (День ветеранов): облигационный рынок закрыт, биржи работают.",
+   "src": "https://www.litefinance.org/blog/analysts-opinions/weekly-economic-calendar-for-09112026-15112026/"
+  },
+  {
+   "t": "2026-11-12T02:00:00Z",
+   "cur": "NZD",
+   "imp": 2,
+   "event": "Новая Зеландия: инфляционные ожидания РБНЗ, IV квартал",
+   "fc": "",
+   "prev": "2,34%",
+   "scen": [
+    "выше прогноза",
+    "ниже прогноза"
+   ],
+   "above": {
+    "NZDUSD": 1
+   },
+   "note": "Рост ожиданий повышает шансы повышения ставки — позитив для NZD.",
+   "src": "https://www.litefinance.org/blog/analysts-opinions/weekly-economic-calendar-for-09112026-15112026/"
+  },
+  {
+   "t": "2026-11-12T07:00:00Z",
+   "cur": "GBP",
+   "imp": 2,
+   "event": "Великобритания: ВВП, III квартал (предварительно)",
+   "fc": "+0,4% кв/кв",
+   "prev": "+0,5% (II кв.)",
+   "scen": [
+    "выше прогноза",
+    "ниже прогноза"
+   ],
+   "above": {
+    "GBPUSD": 1
+   },
+   "note": "Слабый рост — главный риск для фунта после повышения ставки.",
+   "src": "https://www.litefinance.org/blog/analysts-opinions/weekly-economic-calendar-for-09112026-15112026/"
+  },
+  {
+   "t": "2026-11-12T13:30:00Z",
+   "cur": "USD",
+   "imp": 2,
+   "event": "США: первичные заявки на пособие по безработице",
+   "fc": "194 тыс.",
+   "prev": "189 тыс.",
+   "scen": [
+    "больше прогноза",
+    "меньше прогноза"
+   ],
+   "above": {
+    "EURUSD": 1,
+    "USDJPY": -1,
+    "XAUUSD": 1
+   },
+   "note": "Рост заявок — признак охлаждения рынка труда, это ослабляет доллар.",
+   "src": "https://www.fxempire.com/forecasts/article/the-week-ahead-cpi-and-tech-earnings-test-a-fragile-stock-market-1643118"
+  },
+  {
+   "t": "2026-11-12T15:00:00Z",
+   "cur": "USD",
+   "imp": 1,
+   "event": "США: продажи жилья на вторичном рынке, октябрь",
+   "fc": "3,86 млн (−3,3%)",
+   "prev": "3,99 млн",
+   "scen": [
+    "выше прогноза",
+    "ниже прогноза"
+   ],
+   "above": {
+    "USDJPY": 1
+   },
+   "note": "Второстепенный показатель.",
+   "src": "https://continuumeconomics.com/a/f6b1f6ce/fx-weekly-strategy-asia-nov-9-13"
+  },
+  {
+   "t": "2026-11-12T17:00:00Z",
+   "cur": "USD",
+   "imp": 1,
+   "event": "США: запасы нефти EIA, недельные",
+   "fc": "",
+   "prev": "",
+   "scen": [
+    "выше прогноза",
+    "ниже прогноза"
+   ],
+   "above": {
+    "BRENT": -1,
+    "USDCAD": 1
+   },
+   "note": "Из-за Дня ветеранов отчёт EIA перенесён на четверг.",
+   "src": "https://thriveinmarkets.com/calendar/2026-11-09/"
+  },
+  {
+   "t": "2026-11-12T21:00:00Z",
+   "dateOnly": true,
+   "cur": "TSEM",
+   "imp": 2,
+   "event": "Applied Materials и Cisco: квартальные отчёты (после закрытия)",
+   "fc": "AMAT EPS 4,06 $; Cisco EPS 1,32 $, выручка 18,1 млрд $",
+   "prev": "",
+   "scen": [
+    "выше прогноза",
+    "ниже прогноза"
+   ],
+   "above": {
+    "TSEM": 1,
+    "NAS100": 1,
+    "US500": 1
+   },
+   "note": "Отчёт производителя оборудования для чипов задаст тон всему сектору полупроводников, включая Tower.",
+   "src": "https://www.fxempire.com/forecasts/article/the-week-ahead-cpi-and-tech-earnings-test-a-fragile-stock-market-1643118"
+  },
+  {
+   "t": "2026-11-12T23:30:00Z",
+   "cur": "USD",
+   "imp": 2,
+   "event": "США: выступление главы ФРБ Нью-Йорка Джона Уильямса",
+   "fc": "",
+   "prev": "",
+   "scen": [
+    "жёсткий тон",
+    "мягкий тон"
+   ],
+   "above": {
+    "EURUSD": -1,
+    "USDJPY": 1,
+    "XAUUSD": -1
+   },
+   "note": "Уильямс — один из ключевых голосов ФРС; его оценка CPI важна для декабрьского решения.",
+   "src": "https://www.fxempire.com/forecasts/article/the-week-ahead-cpi-and-tech-earnings-test-a-fragile-stock-market-1643118"
+  },
+  {
+   "t": "2026-11-13T10:00:00Z",
+   "dateOnly": true,
+   "cur": "EUR",
+   "imp": 2,
+   "event": "Еврозона: ВВП III квартал (вторая оценка) и занятость",
+   "fc": "",
+   "prev": "+0,4% кв/кв (первая оценка)",
+   "scen": [
+    "выше прогноза",
+    "ниже прогноза"
+   ],
+   "above": {
+    "EURUSD": 1
+   },
+   "note": "Время публикации в источнике не указано.",
+   "src": "https://skyrexx.com/2026/11/07/forex-forecast-november-9-13-2026-dollar-euro-pound-and-yen-in-focus/"
+  },
+  {
+   "t": "2026-11-13T12:00:00Z",
+   "dateOnly": true,
+   "cur": "SPCX",
+   "imp": 2,
+   "event": "SpaceX: целевая дата полёта Starship Flight 15 (по сообщениям СМИ)",
+   "fc": "",
+   "prev": "",
+   "scen": [
+    "успешный полёт",
+    "авария или перенос"
+   ],
+   "above": {
+    "SPCX": 1
+   },
+   "note": "Дата ориентировочная и может сдвинуться.",
+   "src": "https://www.tipranks.com/news/article/spacex-stock-spcx-is-plunging-why-investors-are-scared-today-november-5-2026"
+  },
+  {
+   "t": "2026-11-13T13:30:00Z",
+   "cur": "USD",
+   "imp": 2,
+   "event": "США: индекс цен производителей (PPI), октябрь",
+   "fc": "+0,1…+0,4% м/м (оценки расходятся)",
+   "prev": "+1,3% м/м (сентябрь)",
+   "scen": [
+    "выше прогноза",
+    "ниже прогноза"
+   ],
+   "above": {
+    "EURUSD": -1,
+    "USDJPY": 1,
+    "XAUUSD": -1,
+    "US500": -1
+   },
+   "note": "Подтвердит или опровергнет картину по CPI.",
+   "src": "https://continuumeconomics.com/a/f6b1f6ce/fx-weekly-strategy-asia-nov-9-13"
+  },
+  {
+   "t": "2026-11-13T13:30:00Z",
+   "dateOnly": true,
+   "cur": "CAD",
+   "imp": 1,
+   "event": "Канада: продажи в обрабатывающей промышленности и оптовые продажи, сентябрь",
+   "fc": "+0,1% и +0,5% (предварительные оценки)",
+   "prev": "",
+   "scen": [
+    "выше прогноза",
+    "ниже прогноза"
+   ],
+   "above": {
+    "USDCAD": -1
+   },
+   "note": "Более сильные данные поддерживают канадский доллар.",
+   "src": "https://continuumeconomics.com/a/f6b1f6ce/fx-weekly-strategy-asia-nov-9-13"
+  },
+  {
+   "t": "2026-11-15T23:50:00Z",
+   "cur": "JPY",
+   "imp": 2,
+   "event": "Япония: ВВП, III квартал (предварительно)",
+   "fc": "",
+   "prev": "+0,4% кв/кв",
+   "scen": [
+    "выше прогноза",
+    "ниже прогноза"
+   ],
+   "above": {
+    "USDJPY": -1
+   },
+   "note": "Сильный рост поддержит иену и японские индексы.",
+   "src": "https://www.litefinance.org/blog/analysts-opinions/weekly-economic-calendar-for-09112026-15112026/"
+  }
+ ]
+}

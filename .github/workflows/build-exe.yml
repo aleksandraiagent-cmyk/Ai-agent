@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
   push:
     branches: [claude/app-from-prompt-a6c2y2]
-    paths: ["terminal_app.py", "web/**", "requirements.txt", ".github/workflows/build-exe.yml"]
+    paths: ["terminal_app.py", "app/**", "tools/**", "requirements.txt", ".github/workflows/build-exe.yml"]
 
 jobs:
   windows:
@@ -18,21 +18,33 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install yfinance pandas anthropic pyinstaller
+      - name: Проверка формата данных на живом Yahoo
+        env:
+          PYTHONIOENCODING: utf-8
+        run: python tools/check_format.py
       - name: Сборка
         run: >
-          pyinstaller --onefile --name TerminalApp --add-data "web;web"
+          pyinstaller --onefile --name TerminalApp --add-data "app;app"
           --collect-all yfinance --collect-all curl_cffi --collect-all anthropic
           terminal_app.py
-      - name: Проверка запуска
+      - name: Проверка запуска exe
         shell: pwsh
         run: |
+          $env:TERMINAL_DATA_DIR = "$env:RUNNER_TEMP\tdata"
           $p = Start-Process -FilePath dist\TerminalApp.exe -ArgumentList "--no-browser","--port","8799" -PassThru
           Start-Sleep -Seconds 15
-          $r = Invoke-WebRequest -UseBasicParsing http://127.0.0.1:8799/api/status
           $page = Invoke-WebRequest -UseBasicParsing http://127.0.0.1:8799/
+          $idx = Invoke-WebRequest -UseBasicParsing http://127.0.0.1:8799/data/index.json
+          $r = Invoke-WebRequest -UseBasicParsing -Method Post -ContentType "application/json" -Body '{"trigger_id":"trig_017W1ytcraAtywN9U9kUV1MV","text":"\u0422\u0418\u041a\u0415\u0420: AAPL"}' http://127.0.0.1:8799/api/trigger
+          Start-Sleep -Seconds 60
+          $doc = (Invoke-WebRequest -UseBasicParsing http://127.0.0.1:8799/data/AAPL.json).Content | ConvertFrom-Json
           Stop-Process -Id $p.Id -Force
-          if ($r.StatusCode -ne 200 -or $page.Content -notmatch "terminal") { throw "exe не отвечает" }
-          Write-Output "OK: сервер отвечает"
+          if ($page.Content -notmatch "window.LOCAL_APP=true") { throw "страница терминала не отдаётся" }
+          if ($idx.Content -notmatch "AAPL") { throw "нет данных index.json" }
+          $age = [int][double]::Parse((Get-Date -UFormat %s)) - $doc.updated
+          Write-Output "AAPL обновлён $age с назад, цена $($doc.quote.price)"
+          if ($age -gt 300) { throw "кнопка «Обновить» не обновила AAPL" }
+          Write-Output "OK: exe работает, обновление по кнопке проходит"
       - uses: actions/upload-artifact@v4
         with:
           name: TerminalApp-windows

@@ -4,3 +4,4 @@ terminal_data/
 build/
 dist/
 *.spec
+build_check_data/

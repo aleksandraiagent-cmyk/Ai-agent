@@ -1,0 +1,209 @@
+#!/usr/bin/env python3
+"""Загрузка любого тикера Yahoo Finance для терминала.
+Использование: python3 any_ticker.py "<тикер или название>" [папка_data]
+Создаёт data/<TK>.json (формат как у основной выгрузки) и обновляет data/extra.json
+(каталог дополнительных тикеров). Печатает итог одной строкой JSON."""
+import json, math, re, sys, time, os
+import yfinance as yf
+
+def num(x):
+    try:
+        x = float(x)
+        return x if math.isfinite(x) else None
+    except Exception:
+        return None
+
+def resolve(q):
+    q = q.strip()
+    cand = q.upper().replace(' ', '')
+    if re.fullmatch(r'[A-Z0-9.\-=^]{1,15}', cand):
+        try:
+            h = yf.Ticker(cand).history(period='5d')
+            if len(h):
+                return cand
+        except Exception:
+            pass
+    try:
+        res = yf.Search(q, max_results=8, news_count=0).quotes
+    except Exception:
+        res = []
+    for r in res:
+        s = r.get('symbol')
+        if s and r.get('quoteType') in ('EQUITY', 'ETF', 'CRYPTOCURRENCY', 'INDEX', 'CURRENCY', 'FUTURE', 'MUTUALFUND'):
+            return s
+    return res[0]['symbol'] if res and res[0].get('symbol') else None
+
+def series(t, period, interval, keep):
+    try:
+        h = t.history(period=period, interval=interval, auto_adjust=False, actions=False, prepost=False)
+    except Exception:
+        return None
+    if h is None or not len(h):
+        return None
+    h = h.dropna(subset=['Open', 'High', 'Low', 'Close']).tail(keep)
+    rnd = lambda v: round(float(v), 6 if float(v) < 1 else 4)
+    return {
+        't': [int(ix.timestamp()) for ix in h.index],
+        'o': [rnd(v) for v in h['Open']], 'h': [rnd(v) for v in h['High']],
+        'l': [rnd(v) for v in h['Low']], 'c': [rnd(v) for v in h['Close']],
+        'v': [int(v) if num(v) else 0 for v in h['Volume']],
+    }
+
+_SUFFIX = {'inc', 'corp', 'corporation', 'co', 'ltd', 'plc', 'ag', 'sa', 'nv', 'se', 'group', 'holdings',
+           'company', 'technologies', 'the', 'etf', 'trust', 'fund', 'usd', 'class', 'a', 'b'}
+
+def news_match(sym, name):
+    """Новость берём, только если бумага названа в заголовке: тикер или главное слово названия."""
+    base = sym.split('-')[0].split('.')[0]
+    words = [w for w in re.findall(r"[A-Za-z][A-Za-z&'\-]+", name or '') if w.lower().strip('.') not in _SUFFIX]
+    pats = []
+    if words:
+        pats.append(re.compile(r'(?<!\w)' + re.escape(words[0]) + r'(?!\w)', re.I))
+    if len(base) >= 2:
+        pats.append(re.compile(r'(?<![\w$])\$?' + re.escape(base) + r'(?!\w)'))
+    return lambda title: any(p.search(title) for p in pats) if pats else True
+
+def news_of(t, name=''):
+    match = news_match(t.ticker, name)
+    out = []
+    try:
+        items = t.news or []
+    except Exception:
+        items = []
+    if not items:
+        try:
+            items = yf.Search(t.ticker, max_results=1, news_count=40).news or []
+        except Exception:
+            items = []
+    for n in items:
+        if len(out) >= 12:
+            break
+        c = n.get('content', n)
+        title = c.get('title')
+        if not title or not match(title):
+            continue
+        pub = (c.get('provider') or {}).get('displayName') or c.get('publisher') or 'Yahoo Finance'
+        ts = c.get('pubDate') or c.get('providerPublishTime')
+        if isinstance(ts, str):
+            try:
+                ts = int(time.mktime(time.strptime(ts[:19], '%Y-%m-%dT%H:%M:%S')) - time.timezone)
+            except Exception:
+                ts = int(time.time())
+        link = ((c.get('canonicalUrl') or {}).get('url') or (c.get('clickThroughUrl') or {}).get('url') or c.get('link') or '')
+        out.append({'title': title, 'pub': pub, 't': int(ts or time.time()), 'link': link if link.startswith('https://') else ''})
+    return out
+
+def fair_value(info, price):
+    eps, feps, bv = num(info.get('trailingEps')), num(info.get('forwardEps')), num(info.get('bookValue'))
+    sh = num(info.get('sharesOutstanding'))
+    fcf, cash, debt = num(info.get('freeCashflow')), num(info.get('totalCash')), num(info.get('totalDebt'))
+    fcfps = fcf / sh if fcf and sh else None
+    netcash = (cash or 0) - (debt or 0) if (cash is not None or debt is not None) else None
+    netcashps = netcash / sh if netcash is not None and sh else None
+    g = num(info.get('earningsGrowth'))
+    if (g is None or g <= 0) and eps and feps and eps > 0:
+        g = feps / eps - 1
+    g = min(max(g or 0.05, 0.02), 0.25)
+    m = {}
+    if eps and bv and eps > 0 and bv > 0:
+        m['graham'] = math.sqrt(22.5 * eps * bv)
+    if fcfps and fcfps > 0:
+        r, tg, v, f = 0.09, 0.03, 0, fcfps
+        for y in range(1, 11):
+            f *= 1 + (g if y <= 5 else g / 2)
+            v += f / (1 + r) ** y
+        v += f * (1 + tg) / (r - tg) / (1 + r) ** 10
+        m['dcf'] = v + (netcashps or 0)
+    base = feps if feps and feps > 0 else eps
+    if base and base > 0:
+        m['lynch'] = base * g * 100
+    a = {'mean': num(info.get('targetMeanPrice')), 'median': num(info.get('targetMedianPrice')),
+         'low': num(info.get('targetLowPrice')), 'high': num(info.get('targetHighPrice')),
+         'n': int(info.get('numberOfAnalystOpinions') or 0), 'rec': info.get('recommendationKey') or 'none'}
+    if a['median'] or a['mean']:
+        m['analysts'] = a['median'] or a['mean']
+    if not m:
+        return None
+    w = {'analysts': .4, 'dcf': .25, 'lynch': .2, 'graham': .15}
+    fair = sum(m[k] * w[k] for k in m) / sum(w[k] for k in m)
+    return {'fair': round(fair, 4), 'lo': round(min(m.values()), 4), 'hi': round(max(m.values()), 4),
+            'models': {k: round(v, 4) for k, v in m.items()},
+            'analysts': a if a['n'] else None, 'growth': round(g, 4),
+            'inputs': {'eps': eps, 'feps': feps, 'bv': bv, 'pe': num(info.get('trailingPE')), 'fpe': num(info.get('forwardPE')),
+                       'fcfps': fcfps, 'netcashps': netcashps}}
+
+def save_fail(out, query, err):
+    xp = os.path.join(out, 'extra.json')
+    try:
+        ex = json.load(open(xp))
+    except Exception:
+        ex = {'v': 1, 'tickers': {}}
+    ex.setdefault('fail', {})[query.lower()] = {'t': int(time.time()), 'err': err}
+    ex['updated'] = int(time.time())
+    with open(xp, 'w') as f:
+        json.dump(ex, f, ensure_ascii=False, separators=(',', ':'))
+
+def main():
+    if len(sys.argv) < 2:
+        print(json.dumps({'ok': False, 'err': 'нет запроса'}, ensure_ascii=False)); return
+    query = sys.argv[1]
+    if query.startswith('@'):
+        query = open(query[1:], encoding='utf-8').read()
+    query = re.sub(r'[^\w .&\-=^]', '', query.strip())[:60].strip()
+    if not query:
+        print(json.dumps({'ok': False, 'err': 'пустой запрос'}, ensure_ascii=False)); return
+    out = sys.argv[2] if len(sys.argv) > 2 else 'data'
+    os.makedirs(out, exist_ok=True)
+    sym = resolve(query)
+    if not sym:
+        save_fail(out, query, 'не найден на Yahoo')
+        print(json.dumps({'ok': False, 'q': query, 'err': 'не найден на Yahoo'}, ensure_ascii=False)); return
+    t = yf.Ticker(sym)
+    try:
+        info = t.info or {}
+    except Exception:
+        info = {}
+    qt = info.get('quoteType') or ''
+    tk = re.sub(r'[^A-Z0-9]', '', sym.upper())[:14] or 'X'
+    if qt == 'CRYPTOCURRENCY' and tk.endswith('USD') is False and sym.upper().endswith('-USD'):
+        tk = sym.upper().replace('-', '')
+    d1 = series(t, '5y', '1d', 1255)
+    if not d1 or len(d1['t']) < 60:
+        save_fail(out, query, 'мало истории котировок')
+        print(json.dumps({'ok': False, 'q': query, 'sym': sym, 'err': 'мало истории'}, ensure_ascii=False)); return
+    doc = {'tk': tk, 'yahoo': sym, 'name': info.get('longName') or info.get('shortName') or sym,
+           'mkt': 'CR' if qt == 'CRYPTOCURRENCY' else ('US' if (info.get('market') == 'us_market' and qt in ('EQUITY', 'ETF')) else 'OT'),
+           'updated': int(time.time()), '1d': d1}
+    for key, per, iv in (('1h', '730d', '1h'), ('5m', '60d', '5m'), ('1mo', 'max', '1mo')):
+        s = series(t, per, iv, 1500)
+        if s and len(s['t']) >= 60:
+            doc[key] = s
+    doc['news'] = news_of(t, doc['name'])
+    price = num(info.get('regularMarketPrice')) or d1['c'][-1]
+    q = {'state': info.get('marketState') or 'CLOSED', 'type': qt or 'EQUITY', 'price': price,
+         'prev': num(info.get('regularMarketPreviousClose')) or (d1['c'][-2] if len(d1['c']) > 1 else price),
+         't': int(info.get('regularMarketTime') or d1['t'][-1]), 'cur': info.get('currency') or 'USD'}
+    for k, pk, tkk in (('pre', 'preMarketPrice', 'preMarketTime'), ('post', 'postMarketPrice', 'postMarketTime')):
+        p = num(info.get(pk))
+        if p:
+            q[k] = {'price': p, 't': int(info.get(tkk) or 0), 'hi': p, 'lo': p, 'vol': 0}
+    doc['quote'] = q
+    doc['fv'] = fair_value(info, price) if qt == 'EQUITY' else None
+    with open(os.path.join(out, tk + '.json'), 'w') as f:
+        json.dump(doc, f, ensure_ascii=False, separators=(',', ':'))
+    xp = os.path.join(out, 'extra.json')
+    try:
+        ex = json.load(open(xp))
+    except Exception:
+        ex = {'v': 1, 'tickers': {}}
+    ex.setdefault('tickers', {})[tk] = {'name': doc['name'], 'mkt': doc['mkt'], 'yahoo': sym, 'cur': q['cur'],
+                                       'last': price, 'intervals': [k for k in ('1d', '1h', '5m') if k in doc],
+                                       'news': len(doc['news']), 'q': query.lower(), 'added': ex.get('tickers', {}).get(tk, {}).get('added') or int(time.time()),
+                                       'updated': doc['updated']}
+    ex.get('fail', {}).pop(query.lower(), None)
+    ex['updated'] = int(time.time())
+    with open(xp, 'w') as f:
+        json.dump(ex, f, ensure_ascii=False, separators=(',', ':'))
+    print(json.dumps({'ok': True, 'q': query, 'tk': tk, 'sym': sym, 'name': doc['name'], 'bars': {k: len(doc[k]['t']) for k in ('1d', '1h', '5m') if k in doc}}, ensure_ascii=False))
+
+main()
