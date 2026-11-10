@@ -878,7 +878,13 @@ CLAUDE_SHIM = """<script>(function(){
 
 def page_html(lang: str | None = None) -> bytes:
     html = (APP_DIR / "index.html").read_text(encoding="utf-8")
-    inject = "<script>window.LOCAL_APP=true;</script>"
+    # translate="no" + notranslate: встроенный переводчик Edge/Chrome не трогает страницу. Иначе он спорит
+    # с собственным переводом терминала (EN), текст переписывается по кругу и вкладка зависает.
+    inject = ('<meta name="google" content="notranslate">'
+              "<script>window.LOCAL_APP=true;(function(h){h.setAttribute('translate','no');h.classList.add('notranslate');"
+              "new MutationObserver(function(){if(h.getAttribute('translate')!=='no')h.setAttribute('translate','no');"
+              "if(!h.classList.contains('notranslate'))h.classList.add('notranslate')}).observe(h,{attributes:true,"
+              "attributeFilter:['translate','class']})})(document.documentElement);</script>")
     if lang in ("ru", "en"):  # ?lang=ru — вернуть русский, даже если страница не отвечает
         inject += f"<script>try{{localStorage.setItem('sig.lang','{lang}')}}catch(e){{}}history.replaceState(null,'','/')</script>"
     if claude_available():
