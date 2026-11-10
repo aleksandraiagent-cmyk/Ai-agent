@@ -858,16 +858,52 @@ def touch_icon() -> bytes:
     return _ICON
 
 
-def page_html() -> bytes:
+# Встроенный ИИ артефакта (window.claude.use('sample')) в приложении заменяется на Claude API через /api/claude —
+# только если задан ANTHROPIC_API_KEY. Нужен для перевода интерфейса на английский, ИИ-резюме и оценки заголовков.
+CLAUDE_SHIM = """<script>(function(){
+  window.claude={use:async function(name){
+    if(name!=='sample')return null;
+    var off=false;
+    return async function(prompt,opts){
+      if(off){var e0=new Error('Claude недоступен');e0.code='unavailable';throw e0}
+      var r=await fetch('api/claude',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({prompt:String(prompt),tier:(opts&&opts.modelTier)||''})});
+      var j={};try{j=await r.json()}catch(e){}
+      if(!r.ok||j.ok===false){if(r.status===503||/ANTHROPIC_API_KEY|401|403/.test(j.err||''))off=true;var e=new Error(j.err||('HTTP '+r.status));e.code=j.code||'unavailable';throw e}
+      return {text:j.text||''};
+    };
+  }};
+})();</script>"""
+
+
+def page_html(lang: str | None = None) -> bytes:
     html = (APP_DIR / "index.html").read_text(encoding="utf-8")
-    inject = ("<script>window.LOCAL_APP=true;</script>"
-              '<meta name="apple-mobile-web-app-capable" content="yes">'
-              '<meta name="mobile-web-app-capable" content="yes">'
-              '<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">'
-              '<meta name="apple-mobile-web-app-title" content="Терминал">'
-              '<link rel="apple-touch-icon" href="apple-touch-icon.png">')
-    html = re.sub(r"<head>", "<head>" + inject, html, count=1, flags=re.I) if re.search(r"<head>", html, re.I) else inject + html
+    inject = "<script>window.LOCAL_APP=true;</script>"
+    if lang in ("ru", "en"):  # ?lang=ru — вернуть русский, даже если страница не отвечает
+        inject += f"<script>try{{localStorage.setItem('sig.lang','{lang}')}}catch(e){{}}history.replaceState(null,'','/')</script>"
+    if claude_available():
+        inject += CLAUDE_SHIM
+    inject += ('<meta name="apple-mobile-web-app-capable" content="yes">'
+               '<meta name="mobile-web-app-capable" content="yes">'
+               '<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">'
+               '<meta name="apple-mobile-web-app-title" content="Терминал">'
+               '<link rel="apple-touch-icon" href="apple-touch-icon.png">')
+    html = re.sub(r"<head>", lambda m: m.group(0) + inject, html, count=1, flags=re.I) if re.search(r"<head>", html, re.I) else inject + html
     return html.encode("utf-8")
+
+
+CLAUDE_STATE = {}
+
+
+def ask_claude(prompt: str, max_tokens: int = 8000) -> str:
+    import anthropic  # noqa: WPS433
+    client = anthropic.Anthropic()
+    resp = client.beta.messages.create(model=CLAUDE_MODEL, max_tokens=max_tokens, betas=["server-side-fallback-2026-07-01"],
+                                       fallbacks="default", output_config={"effort": "low"},
+                                       messages=[{"role": "user", "content": prompt}])
+    if resp.stop_reason == "refusal":
+        raise RuntimeError("Claude отклонил запрос")
+    return "".join(getattr(b, "text", "") for b in resp.content if getattr(b, "type", "") == "text")
 
 
 class Handler(SimpleHTTPRequestHandler):
@@ -888,7 +924,8 @@ class Handler(SimpleHTTPRequestHandler):
     def do_GET(self):  # noqa: N802
         path = unquote(urlparse(self.path).path)
         if path in ("/", "/index.html"):
-            return self._send(200, page_html(), "text/html; charset=utf-8")
+            q = dict(x.split("=", 1) for x in urlparse(self.path).query.split("&") if "=" in x)
+            return self._send(200, page_html(q.get("lang")), "text/html; charset=utf-8")
         if path in ("/apple-touch-icon.png", "/apple-touch-icon-precomposed.png", "/favicon.ico"):
             return self._send(200, touch_icon(), "image/png")
         if path == "/api/status":
@@ -915,6 +952,20 @@ class Handler(SimpleHTTPRequestHandler):
             body = json.loads(self.rfile.read(n).decode("utf-8")) if n else {}
         except Exception:  # noqa: BLE001
             body = {}
+        if path == "/api/claude":
+            if not claude_available() or CLAUDE_STATE.get("off"):
+                return self._json({"ok": False, "code": "unavailable", "err": CLAUDE_STATE.get("off") or "Claude не подключён"}, 503)
+            try:
+                return self._json({"ok": True, "text": ask_claude(str(body.get("prompt", ""))[:100000])})
+            except Exception as exc:  # noqa: BLE001
+                msg = str(exc)
+                if any(k in msg for k in ("401", "403", "authentication", "permission", "credit", "billing")):
+                    CLAUDE_STATE["off"] = "Claude недоступен: проверьте ANTHROPIC_API_KEY и баланс"
+                    log("Claude: ключ ANTHROPIC_API_KEY не подходит (" + msg[:120] + "). "
+                        "До перезапуска приложения Claude не используется; английский — по встроенному словарю.")
+                else:
+                    log(f"Claude: {msg[:200]}")
+                return self._json({"ok": False, "code": "unavailable", "err": msg[:300]}, 502)
         if path != "/api/trigger":
             return self._json({"ok": False, "err": "not found"}, 404)
         trig, text = body.get("trigger_id"), str(body.get("text") or "")
@@ -1003,7 +1054,9 @@ def main():
         print("  Если Windows спросит про брандмауэр — разрешите доступ в частных сетях.")
         print()
     print("Данные:", DATA)
-    print("Claude (новости Форекс):", "подключён" if claude_available() else "не подключён (нужен ANTHROPIC_API_KEY)")
+    print("Claude (английский интерфейс, ИИ-резюме, новости Форекс):",
+          "подключён" if claude_available() else "не подключён (нужен ANTHROPIC_API_KEY)")
+    print("Вернуть русский язык:", url + "?lang=ru")
     print("Не закрывайте это окно, пока работаете с терминалом.")
     print("=" * 60, flush=True)
     if args.window:
